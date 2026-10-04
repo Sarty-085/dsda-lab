@@ -106,20 +106,59 @@ export const BreadboardSVG: React.FC<BreadboardSVGProps> = ({
     ? config.wires.filter(w => userPlacedWireIds.includes(w.id))
     : config.wires;
 
+  // Zoom / Pan state for mobile comfort
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+
   return (
-    <div
-      className="relative w-full flex justify-center bg-slate-950 p-1 sm:p-4 rounded-xl border border-slate-800 shadow-2xl overflow-hidden select-none touch-none"
-      onMouseMove={handleMouseMove}
-      onTouchMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onTouchEnd={handleMouseUp}
-    >
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${BB_CONFIG.viewBoxWidth} ${BB_CONFIG.viewBoxHeight}`}
-        className="w-full max-w-[620px] h-auto drop-shadow-2xl"
-        style={{ filter: 'drop-shadow(0 20px 25px rgba(0,0,0,0.6))' }}
+    <div className="flex flex-col gap-2 w-full">
+      {/* Mobile Breadboard Control Bar: Zoom & Reset */}
+      <div className="flex items-center justify-between px-1 py-1 text-xs">
+        <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+          <span className="hidden sm:inline">Canvas:</span>
+          <span className="font-mono text-sky-400">{Math.round(zoomLevel * 100)}%</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setZoomLevel(z => Math.max(0.75, Math.round((z - 0.15) * 100) / 100))}
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold active:scale-95 transition-transform"
+            title="Zoom out"
+          >
+            -
+          </button>
+          <button
+            onClick={() => setZoomLevel(1)}
+            className="px-2 h-7 flex items-center justify-center rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 text-[11px] font-medium active:scale-95 transition-transform"
+            title="Reset Zoom"
+          >
+            100%
+          </button>
+          <button
+            onClick={() => setZoomLevel(z => Math.min(1.75, Math.round((z + 0.15) * 100) / 100))}
+            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 font-bold active:scale-95 transition-transform"
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div
+        className="relative w-full flex justify-center bg-slate-950 p-1 sm:p-4 rounded-xl border border-slate-800 shadow-2xl overflow-x-auto overflow-y-hidden select-none touch-pan-x"
+        onMouseMove={handleMouseMove}
+        onTouchMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onTouchEnd={handleMouseUp}
       >
+        <div
+          className="transition-transform duration-150 origin-top flex justify-center w-full min-w-[320px]"
+          style={{ transform: `scale(${zoomLevel})` }}
+        >
+          <svg
+            ref={svgRef}
+            viewBox={`0 0 ${BB_CONFIG.viewBoxWidth} ${BB_CONFIG.viewBoxHeight}`}
+            className="w-full max-w-[620px] h-auto drop-shadow-2xl"
+            style={{ filter: 'drop-shadow(0 20px 25px rgba(0,0,0,0.6))' }}
+          >
         <defs>
           {/* Subtle breadboard background gradients and filters */}
           <linearGradient id="bb-surface" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1183,6 +1222,8 @@ export const BreadboardSVG: React.FC<BreadboardSVGProps> = ({
           );
         })}
       </svg>
+        </div>
+      </div>
     </div>
   );
 };

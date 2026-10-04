@@ -44,9 +44,9 @@ export const BuildModePanel: React.FC<BuildModePanelProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-amber-500/40 rounded-xl overflow-hidden shadow-2xl p-4 flex flex-col gap-3.5">
+    <div className="bg-slate-900 border border-amber-500/40 rounded-xl overflow-hidden shadow-2xl p-3 sm:p-4 flex flex-col gap-3">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-2.5 sm:pb-3">
         <div className="flex items-center gap-2">
           <span className="p-1 rounded bg-amber-500/20 text-amber-400">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,14 +54,14 @@ export const BuildModePanel: React.FC<BuildModePanelProps> = ({
             </svg>
           </span>
           <div>
-            <h3 className="text-sm font-bold text-amber-300">Guided Breadboard Assembly Tutor</h3>
-            <p className="text-[11px] text-slate-400">Step-by-step physical breadboard connection trainer</p>
+            <h3 className="text-xs sm:text-sm font-bold text-amber-300">Guided Breadboard Assembly Tutor</h3>
+            <p className="text-[10px] sm:text-[11px] text-slate-400">Step-by-step physical breadboard connection trainer</p>
           </div>
         </div>
 
         {/* Progress badge */}
         <div className="text-right">
-          <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded-full ${
+          <span className={`text-[10px] sm:text-xs font-mono font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full ${
             isComplete ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
           }`}>
             {placedCount} / {totalRequiredWires} Wires

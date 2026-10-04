@@ -32,28 +32,28 @@ export const CircuitExplainer: React.FC<CircuitExplainerProps> = ({
   const currentStep = steps[activeStepIndex] || steps[0];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl p-4 flex flex-col gap-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl p-3 sm:p-4 flex flex-col gap-3.5">
       {/* Header and Controls */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-800 pb-3">
         <div className="flex items-center gap-2">
-          <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400">
+          <span className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 shrink-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </span>
-          <h3 className="text-sm font-semibold text-slate-100">Step-by-Step Circuit Walkthrough</h3>
+          <h3 className="text-xs sm:text-sm font-semibold text-slate-100">Step-by-Step Circuit Walkthrough</h3>
         </div>
 
         {/* Playback & Step Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <select
             value={playbackSpeed}
             onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-            className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded px-2 py-1 outline-none"
+            className="bg-slate-800 border border-slate-700 text-slate-300 text-[11px] sm:text-xs rounded px-2 py-1 outline-none"
           >
-            <option value={3000}>0.5x Speed (3s)</option>
-            <option value={2000}>1.0x Speed (2s)</option>
-            <option value={1000}>2.0x Speed (1s)</option>
+            <option value={3000}>0.5x (3s)</option>
+            <option value={2000}>1.0x (2s)</option>
+            <option value={1000}>2.0x (1s)</option>
           </select>
 
           <button

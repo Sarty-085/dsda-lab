@@ -29,39 +29,39 @@ export const TruthTable: React.FC<TruthTableProps> = ({
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-      <div className="px-4 py-3 bg-slate-800/60 border-b border-slate-800 flex items-center justify-between">
+      <div className="px-3.5 sm:px-4 py-2.5 sm:py-3 bg-slate-800/60 border-b border-slate-800 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+          <h3 className="text-xs sm:text-sm font-semibold text-slate-100 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
             Truth Table (Bidirectional)
           </h3>
-          <p className="text-xs text-slate-400">Click any row to test circuit with those inputs</p>
+          <p className="text-[10px] sm:text-xs text-slate-400">Click any row to test circuit with those inputs</p>
         </div>
-        <span className="text-xs px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 font-mono">
+        <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded bg-slate-700/60 text-slate-300 font-mono">
           {truthTable.length} States
         </span>
       </div>
 
-      <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
-        <table className="w-full text-xs text-left border-collapse font-mono">
+      <div className="overflow-x-auto max-h-[280px] sm:max-h-[320px] overflow-y-auto">
+        <table className="w-full text-[11px] sm:text-xs text-left border-collapse font-mono">
           <thead className="sticky top-0 bg-slate-900/95 backdrop-blur z-10 border-b border-slate-800">
             <tr>
-              <th className="py-2.5 px-3 font-semibold text-slate-400 border-r border-slate-800/80">#</th>
+              <th className="py-2 sm:py-2.5 px-2.5 sm:px-3 font-semibold text-slate-400 border-r border-slate-800/80">#</th>
               {/* Inputs Columns */}
               {inputLabels.map(label => (
-                <th key={label} className="py-2.5 px-3 font-bold text-sky-400 text-center">
+                <th key={label} className="py-2 sm:py-2.5 px-2.5 sm:px-3 font-bold text-sky-400 text-center">
                   {label}
                 </th>
               ))}
               {/* Divider */}
-              <th className="w-2 py-2.5 px-1 border-r border-slate-800 text-slate-600 text-center">│</th>
+              <th className="w-2 py-2 sm:py-2.5 px-1 border-r border-slate-800 text-slate-600 text-center">│</th>
               {/* Outputs Columns */}
               {outputLabels.map(label => (
-                <th key={label} className="py-2.5 px-3 font-bold text-emerald-400 text-center">
+                <th key={label} className="py-2 sm:py-2.5 px-2.5 sm:px-3 font-bold text-emerald-400 text-center">
                   {label}
                 </th>
               ))}
-              <th className="py-2.5 px-3 font-semibold text-slate-400">Condition / Note</th>
+              <th className="py-2 sm:py-2.5 px-2.5 sm:px-3 font-semibold text-slate-400">Condition / Note</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">

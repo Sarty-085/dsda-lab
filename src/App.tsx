@@ -256,15 +256,15 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Sub-Header: Subcircuit Variants & Navigation Tabs */}
-      <div className="bg-slate-900/80 border-b border-slate-800 backdrop-blur sticky top-[61px] z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div className="bg-slate-900/90 border-b border-slate-800 backdrop-blur sticky top-[57px] sm:top-[61px] z-20 shadow-md">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
           {/* Subcircuit Variant Badges */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto py-0.5 no-scrollbar scroll-smooth">
             {currentExp.subCircuits.map(sub => (
               <button
                 key={sub.id}
                 onClick={() => setCurrentSubId(sub.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
                   sub.id === currentSub.id
                     ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
                     : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
@@ -276,21 +276,21 @@ export const App: React.FC = () => {
           </div>
 
           {/* Feature Navigation Tabs */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 overflow-x-auto w-full sm:w-auto text-xs">
+          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 overflow-x-auto w-full sm:w-auto text-[11px] sm:text-xs no-scrollbar scroll-smooth">
             {[
-              { id: 'SIMULATOR', label: 'Circuit Simulator', icon: '⚡' },
-              { id: 'BUILD', label: 'Build Mode', icon: '🛠' },
-              { id: 'THEORY', label: 'Theory & Apparatus', icon: '📖' },
+              { id: 'SIMULATOR', label: 'Simulator', icon: '⚡' },
+              { id: 'BUILD', label: 'Build', icon: '🛠' },
+              { id: 'THEORY', label: 'Theory', icon: '📖' },
               { id: 'OBSERVATIONS', label: 'Observations', icon: '📋' },
-              { id: 'VIVA', label: 'Viva-Voce', icon: '🎓' },
-              { id: 'QUIZ', label: 'Practice Quiz', icon: '✍' },
+              { id: 'VIVA', label: 'Viva', icon: '🎓' },
+              { id: 'QUIZ', label: 'Quiz', icon: '✍' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as ActiveTab)}
-                className={`px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
                   activeTab === tab.id
-                    ? 'bg-slate-800 text-slate-100 shadow-sm'
+                    ? 'bg-slate-800 text-slate-100 shadow-sm border border-slate-700/60'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -303,30 +303,75 @@ export const App: React.FC = () => {
       </div>
 
       {/* 3. Main Workspace Area */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 py-6">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6">
         {/* TAB 1: CIRCUIT SIMULATOR */}
         {activeTab === 'SIMULATOR' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
             {/* Left Column: Virtual Breadboard Canvas (7 cols on lg) */}
-            <div className="lg:col-span-7 flex flex-col gap-4">
-              <div className="flex items-center justify-between">
+            <div className="lg:col-span-7 flex flex-col gap-3.5 sm:gap-4">
+              {/* Circuit Header & Polarity Legend */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
                 <div>
-                  <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-2 flex-wrap">
                     <span>{currentSub.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
-                      {currentSub.subtitle ?? ''}
-                    </span>
+                    {currentSub.subtitle && (
+                      <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-400 font-mono">
+                        {currentSub.subtitle}
+                      </span>
+                    )}
                   </h2>
-                  <p className="text-xs text-slate-400">{currentSub.description}</p>
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">{currentSub.description}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                    <span className="w-2 h-2 rounded-full bg-red-500"></span> 5V HIGH
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm shadow-red-500/50"></span> 5V HIGH (1)
                   </span>
-                  <span className="flex items-center gap-1 text-[11px] text-slate-400">
-                    <span className="w-2 h-2 rounded-full bg-blue-500"></span> 0V LOW
+                  <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50"></span> 0V LOW (0)
                   </span>
                 </div>
+              </div>
+
+              {/* Dedicated Mobile Quick Input Controls Bar (Direct large touch targets) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                  <span className="text-xs font-bold text-sky-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-sky-400"></span> Input Switches:
+                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {currentSub.inputs.map(inp => {
+                      const sw = circuit.switches[inp.id];
+                      const isHigh = (switchStates[inp.id] ?? sw?.state ?? inp.defaultState) === DigitalSignal.HIGH;
+                      return (
+                        <button
+                          key={inp.id}
+                          onClick={() => handleToggleSwitch(inp.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 border transition-all active:scale-95 shadow-sm ${
+                            isHigh
+                              ? 'bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30'
+                              : 'bg-slate-950 border-slate-700 text-blue-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="text-slate-400">{inp.label}:</span>
+                          <span className={`w-2 h-2 rounded-full ${isHigh ? 'bg-red-500' : 'bg-blue-500'}`}></span>
+                          <span>{isHigh ? '1 (HIGH)' : '0 (LOW)'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const reset: Record<string, DigitalSignal> = {};
+                    for (const inp of currentSub.inputs) reset[inp.id] = DigitalSignal.LOW;
+                    setSwitchStates(reset);
+                    setSimTick(t => t + 1);
+                  }}
+                  className="w-full sm:w-auto px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors shrink-0 text-center"
+                >
+                  Reset All to 0
+                </button>
               </div>
 
               {/* Breadboard Visual Canvas */}
@@ -339,29 +384,17 @@ export const App: React.FC = () => {
                 onSelectComponent={(comp) => setSelectedComp(comp)}
               />
 
-              {/* Live Signal Legend & Tip */}
+              {/* Interactive Tip */}
               <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-3 flex items-center justify-between text-xs text-slate-400">
                 <div className="flex items-center gap-2">
-                  <span className="text-sky-400 font-bold">💡 Interactive Tip:</span>
-                  <span>Click switches on the left to toggle bits (0/1). Click ICs or wires to inspect internal signals.</span>
+                  <span className="text-sky-400 font-bold shrink-0">💡 Tip:</span>
+                  <span className="text-[11px] sm:text-xs">Use the quick toggle buttons above or tap on breadboard switches/ICs directly. Pinch or use +/- to zoom.</span>
                 </div>
-                <button
-                  onClick={() => {
-                    // Reset all inputs to LOW
-                    const reset: Record<string, DigitalSignal> = {};
-                    for (const inp of currentSub.inputs) reset[inp.id] = DigitalSignal.LOW;
-                    setSwitchStates(reset);
-                    setSimTick(t => t + 1);
-                  }}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-medium"
-                >
-                  Reset Inputs (All 0)
-                </button>
               </div>
             </div>
 
             {/* Right Column: Interactive Panels (5 cols on lg) */}
-            <div className="lg:col-span-5 flex flex-col gap-5">
+            <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
               {/* Bidirectional Truth Table */}
               <TruthTable
                 truthTable={currentSub.truthTable}

@@ -40,7 +40,9 @@ export type GateType =
   | 'XOR'
   | 'XNOR'
   | 'BUFFER'
-  | 'ADDER_4BIT';
+  | 'ADDER_4BIT'
+  | 'D_FF_7474'
+  | 'SHIFT_REG_7495';
 
 export interface InternalGate {
   id: string;

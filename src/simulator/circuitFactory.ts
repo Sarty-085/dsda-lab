@@ -9,6 +9,22 @@ import { DigitalSignal, SwitchComponent, LEDComponent } from './engine/types';
 export function buildCircuitFromConfig(config: SubCircuitConfig, activeWireIds?: string[]): Circuit {
   const circuit = new Circuit(config.id);
 
+  // Register global power rail pins so wires referencing pwr_vcc / pwr_gnd resolve reliably
+  circuit.addPin({
+    id: 'pwr_vcc',
+    label: 'VCC Rail (+5V)',
+    direction: 'POWER',
+    signal: DigitalSignal.HIGH,
+    componentId: 'power_rail',
+  });
+  circuit.addPin({
+    id: 'pwr_gnd',
+    label: 'GND Rail (0V)',
+    direction: 'GROUND',
+    signal: DigitalSignal.LOW,
+    componentId: 'ground_rail',
+  });
+
   // 1. Add ICs
   for (const icConfig of config.ics) {
     const def = IC_CATALOG[icConfig.partNumber];

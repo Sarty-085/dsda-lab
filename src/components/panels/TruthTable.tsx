@@ -7,7 +7,8 @@ interface TruthTableProps {
   inputLabels: string[];
   outputLabels: string[];
   currentInputs: Record<string, DigitalSignal>;
-  onSelectRowInputs: (inputs: Record<string, DigitalSignal>) => void;
+  activeRowIndex?: number | null;
+  onSelectRowInputs: (inputs: Record<string, DigitalSignal>, rowIndex?: number) => void;
 }
 
 export const TruthTable: React.FC<TruthTableProps> = ({
@@ -15,6 +16,7 @@ export const TruthTable: React.FC<TruthTableProps> = ({
   inputLabels,
   outputLabels,
   currentInputs,
+  activeRowIndex,
   onSelectRowInputs,
 }) => {
   // Determine if a row matches current simulator input states
@@ -66,7 +68,10 @@ export const TruthTable: React.FC<TruthTableProps> = ({
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {truthTable.map((row, index) => {
-              const active = isRowActive(row);
+              const active =
+                activeRowIndex !== null && activeRowIndex !== undefined
+                  ? index === activeRowIndex
+                  : isRowActive(row);
 
               return (
                 <tr
@@ -76,7 +81,7 @@ export const TruthTable: React.FC<TruthTableProps> = ({
                     for (const [k, v] of Object.entries(row.inputs)) {
                       newInputs[k] = v === 1 ? DigitalSignal.HIGH : DigitalSignal.LOW;
                     }
-                    onSelectRowInputs(newInputs);
+                    onSelectRowInputs(newInputs, index);
                   }}
                   className={`cursor-pointer transition-colors ${
                     active

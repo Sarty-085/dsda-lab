@@ -112,3 +112,42 @@ This document traces every experiment implemented in this simulator directly to 
 - **Implementation Decisions**:
   - Real-time display of both stages: Initial Binary Sum stage and Final Corrected BCD stage.
   - Visual callout when sum exceeds 9 explaining why $+6$ ($0110_2$) is injected.
+
+---
+
+## Experiment 7: Construction and Implementation of Parity Bit Generator/Checker
+- **Source Manual File**: `Exp7_Parity_generator_and_checker_1.pdf` (Pages 1 to 3, CMP-203 Lab Manual).
+- **Direct Source Truth**:
+  - Components: Breadboard, power supply, wires, crocodile clips, 330Ω resistors, LEDs, IC 7486 (Quad 2-input XOR), IC 7404 (Hex Inverter for odd parity generator).
+  - Even Parity Generator: $f = A \oplus B \oplus C \oplus D$ (3 XOR gates of IC 7486).
+  - Even Parity Checker: $f = A \oplus B \oplus C \oplus D \oplus P$ (4 XOR gates of IC 7486; `0 = no error`, `1 = error`).
+  - Odd Parity Generator: $f = \overline{(A \oplus B) \oplus (C \oplus D)} = \overline{A \oplus B \oplus C \oplus D}$ (3 XOR gates + NOT gate).
+  - Odd Parity Checker: $f = A \oplus B \oplus C \oplus D \oplus P$ (4 XOR gates; `0 = error`, `1 = no error`).
+
+---
+
+## Experiment 8: Multiplexer and Demultiplexer
+- **Source Manual File**: `Expt_9_mux_demux.pdf` (Manual Experiment No: 8, Pages 22 to 23).
+- **Direct Source Truth**:
+  - Components: Breadboard, power supply, connecting wires, 3-input AND gates (IC 7411), 2-input OR gates (IC 7432), NOT gates (IC 7404), LEDs, 330Ω resistors.
+  - 4:1 Multiplexer: $Z = D_0 \overline{S_1}\,\overline{S_0} + D_1 \overline{S_1} S_0 + D_2 S_1 \overline{S_0} + D_3 S_1 S_0$ using 2 NOTs, 4 3-input ANDs (2× IC 7411), and 3 ORs (IC 7432).
+  - 1:4 Demultiplexer: $O_0 = D\overline{S_1}\,\overline{S_0}$, $O_1 = D\overline{S_1}S_0$, $O_2 = D S_1\overline{S_0}$, $O_3 = D S_1 S_0$ using 2 NOTs and 4 3-input ANDs.
+
+---
+
+## Experiment 9: Verify the Truth Table of JK and D Flip-Flops
+- **Source Manual File**: `Expt_8_flipflops_1.pdf` (Manual Experiment No: 9, Pages 1 to 3).
+- **Direct Source Truth**:
+  - Components: Breadboard, power supply, function generator/clock switch, BNC cable, wires, IC 7400 (Quad 2-input NAND), IC 7410 (Triple 3-input NAND for JK steering), 330Ω resistors, LEDs.
+  - D Flip-Flop: 5 NAND gates across 2× IC 7400 (input inverter + gated SR NAND latch).
+  - JK Flip-Flop: Two 3-input steering NANDs (IC 7410) with cross-feedback from $Q$ and $Q'$ feeding a cross-coupled SR NAND latch (IC 7400), toggling on leading edge of clock signal.
+
+---
+
+## Experiment 10: Design SISO, SIPO Shift Register
+- **Source Manual File**: `Expt_10.pdf` (Pages 26 to 27, CMP-203 Lab Manual).
+- **Direct Source Truth**:
+  - Components: Breadboard, power supply, function generator/clock switch, BNC cable, wires, IC 7474 (2× Dual D Flip-Flop with Preset and Clear), IC 7495 (4-bit Shift Register), 330Ω resistors, LEDs.
+  - SISO Shift Register: 4 cascaded D flip-flops (2× IC 7474) clocked in parallel showing serial delay through $Q_1 \to Q_2 \to Q_3 \to Q_4\,(S_{\text{out}})$.
+  - SIPO Shift Register (7474): 4 cascaded D flip-flops with common Clock and active-low Clear driving parallel outputs $Q_A..Q_D$.
+  - 4-Bit Shift Register (7495): Mode Control $M=0$ serial right shift ($D_S \to Q_A..Q_D$) via CK1 and $M=1$ parallel load reset ($0000$) via CK2.

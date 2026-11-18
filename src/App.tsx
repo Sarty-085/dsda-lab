@@ -36,8 +36,10 @@ export const App: React.FC = () => {
   // Active Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('SIMULATOR');
 
-  // Input switch toggle states
+  // Input switch toggle states & sequential replay history
   const [switchStates, setSwitchStates] = useState<Record<string, DigitalSignal>>({});
+  const [switchHistory, setSwitchHistory] = useState<Array<Record<string, DigitalSignal>>>([]);
+  const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
 
   // Build Mode state
   const [userPlacedWireIds, setUserPlacedWireIds] = useState<string[]>([]);
@@ -51,11 +53,15 @@ export const App: React.FC = () => {
     const c = activeTab === 'BUILD'
       ? buildCircuitFromConfig(currentSub, userPlacedWireIds)
       : buildCircuitFromConfig(currentSub);
-    if (Object.keys(switchStates).length > 0) {
+    if (switchHistory.length > 0) {
+      for (const stepStates of switchHistory) {
+        c.setSwitches(stepStates);
+      }
+    } else if (Object.keys(switchStates).length > 0) {
       c.setSwitches(switchStates);
     }
     return c;
-  }, [currentSub, activeTab, userPlacedWireIds, switchStates]);
+  }, [currentSub, activeTab, userPlacedWireIds, switchStates, switchHistory]);
 
   // Explainer state
   const [activeExplainStep, setActiveExplainStep] = useState<number>(0);
@@ -86,29 +92,52 @@ export const App: React.FC = () => {
     setActiveExplainStep(0);
     setSelectedComp(null);
     setSwitchStates({});
+    setSwitchHistory([]);
+    setActiveRowIndex(null);
   }, [currentSubId]);
 
   // Handle Switch Toggle
   const handleToggleSwitch = (switchId: string) => {
     const currentSig = switchStates[switchId] ?? circuit.switches[switchId]?.state ?? DigitalSignal.LOW;
     const nextSignal = currentSig === DigitalSignal.HIGH ? DigitalSignal.LOW : DigitalSignal.HIGH;
-    setSwitchStates(prev => ({ ...prev, [switchId]: nextSignal }));
+    const updatedStates = { ...switchStates, [switchId]: nextSignal };
+    setSwitchStates(updatedStates);
+    setSwitchHistory(prev => [...prev, updatedStates]);
+    setActiveRowIndex(null);
     setSimTick(t => t + 1);
   };
 
-  // Handle Truth Table row selection (set circuit inputs from table)
-  const handleSelectRowInputs = (newInputs: Record<string, DigitalSignal>) => {
-    const switchUpdates: Record<string, DigitalSignal> = {};
-    for (const [inKey, sig] of Object.entries(newInputs)) {
-      // Find matching input switch ID
-      const matched = currentSub.inputs.find(
-        i => i.label.toLowerCase() === inKey.toLowerCase() || i.id.toLowerCase().includes(inKey.toLowerCase())
-      );
-      if (matched) {
-        switchUpdates[matched.id] = sig;
+  // Handle Truth Table row selection (set circuit inputs and replay sequence from row 0)
+  const handleSelectRowInputs = (newInputs: Record<string, DigitalSignal>, rowIndex?: number) => {
+    const mapRowToSwitchUpdates = (rowInputs: Record<string, number | DigitalSignal>) => {
+      const mapped: Record<string, DigitalSignal> = {};
+      for (const [inKey, val] of Object.entries(rowInputs)) {
+        const keyLower = inKey.toLowerCase();
+        const matched =
+          currentSub.inputs.find(i => i.label.toLowerCase() === keyLower) ||
+          currentSub.inputs.find(i => i.id.toLowerCase().includes(keyLower));
+        if (matched) {
+          mapped[matched.id] =
+            val === 1 || val === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+        }
       }
+      return mapped;
+    };
+
+    if (rowIndex !== undefined && currentSub.truthTable[rowIndex]) {
+      const history = currentSub.truthTable
+        .slice(0, rowIndex + 1)
+        .map(r => mapRowToSwitchUpdates(r.inputs));
+      setSwitchHistory(history);
+      setActiveRowIndex(rowIndex);
+      setSwitchStates(history[history.length - 1] ?? {});
+    } else {
+      const switchUpdates = mapRowToSwitchUpdates(newInputs);
+      const updated = { ...switchStates, ...switchUpdates };
+      setSwitchStates(updated);
+      setSwitchHistory(prev => [...prev, updated]);
+      setActiveRowIndex(null);
     }
-    setSwitchStates(prev => ({ ...prev, ...switchUpdates }));
     setSimTick(t => t + 1);
   };
 
@@ -366,6 +395,8 @@ export const App: React.FC = () => {
                     const reset: Record<string, DigitalSignal> = {};
                     for (const inp of currentSub.inputs) reset[inp.id] = DigitalSignal.LOW;
                     setSwitchStates(reset);
+                    setSwitchHistory([reset]);
+                    setActiveRowIndex(null);
                     setSimTick(t => t + 1);
                   }}
                   className="w-full sm:w-auto px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors shrink-0 text-center"
@@ -401,6 +432,7 @@ export const App: React.FC = () => {
                 inputLabels={inputLabels}
                 outputLabels={outputLabels}
                 currentInputs={currentInputsMap}
+                activeRowIndex={activeRowIndex}
                 onSelectRowInputs={handleSelectRowInputs}
               />
 
@@ -494,6 +526,7 @@ export const App: React.FC = () => {
                   inputLabels={inputLabels}
                   outputLabels={outputLabels}
                   currentInputs={currentInputsMap}
+                  activeRowIndex={activeRowIndex}
                   onSelectRowInputs={handleSelectRowInputs}
                 />
               </div>

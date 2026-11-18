@@ -22,6 +22,15 @@ export class Circuit {
   public intermediateSignals: Record<string, DigitalSignal> = {};
   public hasContention = false;
   public contentionMessage?: string;
+  private dffState: Record<string, { q: DigitalSignal; prevClk: DigitalSignal }> = {};
+  private sr7495State: Record<string, {
+    qa: DigitalSignal;
+    qb: DigitalSignal;
+    qc: DigitalSignal;
+    qd: DigitalSignal;
+    prevCk1: DigitalSignal;
+    prevCk2: DigitalSignal;
+  }> = {};
 
   constructor(public id: string = 'main_circuit') {}
 
@@ -167,10 +176,58 @@ export class Circuit {
       }
     }
 
-    // Propagation iteration loop (max 20 iterations to resolve cascades)
+    // Build fast pin -> net lookup
+    const pinToNet: Record<string, string[]> = {};
+    for (const net of nets) {
+      for (const pinId of net) {
+        pinToNet[pinId] = net;
+      }
+    }
+
+    const resolveNet = (net: string[]): boolean => {
+      let netChanged = false;
+      let drivingSignal = DigitalSignal.FLOATING;
+      let driversCount = 0;
+      let conflicting = false;
+
+      for (const pinId of net) {
+        const pin = this.pins[pinId];
+        if (!pin) continue;
+        if (pin.direction === 'OUTPUT' || pin.direction === 'POWER' || pin.direction === 'GROUND') {
+          if (pin.signal !== DigitalSignal.FLOATING) {
+            if (driversCount > 0 && drivingSignal !== pin.signal) {
+              conflicting = true;
+            }
+            drivingSignal = pin.signal;
+            driversCount++;
+          }
+        }
+      }
+
+      if (conflicting) {
+        this.hasContention = true;
+        this.contentionMessage = `Bus contention detected: Multiple drivers asserting different signals on net containing ${net.join(', ')}`;
+      }
+
+      // Apply net signal to all pins in this net
+      for (const pinId of net) {
+        const pin = this.pins[pinId];
+        if (!pin) continue;
+        if (pin.direction === 'INPUT' || pin.direction === 'PASSIVE') {
+          if (pin.signal !== drivingSignal) {
+            pin.signal = drivingSignal;
+            netChanged = true;
+          }
+        }
+      }
+      return netChanged;
+    };
+
+    // Propagation iteration loop (max 25 iterations to resolve cascades)
     let changed = true;
     let iteration = 0;
     const MAX_ITERATIONS = 25;
+    let preEdgeSignals: Record<string, DigitalSignal> = {};
 
     while (changed && iteration < MAX_ITERATIONS) {
       changed = false;
@@ -178,51 +235,104 @@ export class Circuit {
 
       // 1. Resolve nets: every net takes the signal from its driver (OUTPUT, POWER, GROUND)
       for (const net of nets) {
-        let drivingSignal = DigitalSignal.FLOATING;
-        let driversCount = 0;
-        let conflicting = false;
-
-        for (const pinId of net) {
-          const pin = this.pins[pinId];
-          if (!pin) continue;
-          if (pin.direction === 'OUTPUT' || pin.direction === 'POWER' || pin.direction === 'GROUND') {
-            if (pin.signal !== DigitalSignal.FLOATING) {
-              if (driversCount > 0 && drivingSignal !== pin.signal) {
-                conflicting = true;
-              }
-              drivingSignal = pin.signal;
-              driversCount++;
-            }
-          }
+        if (resolveNet(net)) {
+          changed = true;
         }
+      }
 
-        if (conflicting) {
-          this.hasContention = true;
-          this.contentionMessage = `Bus contention detected: Multiple drivers asserting different signals on net containing ${net.join(', ')}`;
-        }
-
-        // Apply net signal to all pins and wires in this net
-        for (const pinId of net) {
-          const pin = this.pins[pinId];
-          if (!pin) continue;
-          if (pin.direction === 'INPUT' || pin.direction === 'PASSIVE') {
-            if (pin.signal !== drivingSignal) {
-              pin.signal = drivingSignal;
-              changed = true;
-            }
-          }
+      // Snapshot pin states right after initial net resolution for edge-triggered evaluation
+      if (iteration === 1) {
+        preEdgeSignals = {};
+        for (const [pId, p] of Object.entries(this.pins)) {
+          preEdgeSignals[pId] = p.signal;
         }
       }
 
       // 2. Evaluate IC internal gates
       for (const ic of Object.values(this.ics)) {
         for (const gate of ic.definition.gates) {
-          const inputSignals = gate.inputPinNumbers.map(pinNum => {
-            const pinId = ic.pinIds[pinNum];
-            return this.pins[pinId]?.signal ?? DigitalSignal.LOW;
-          });
+          let outputSignals: DigitalSignal[];
 
-          const outputSignals = evaluateGate(gate.type, inputSignals);
+          if (gate.type === 'D_FF_7474') {
+            if (iteration > 1) continue;
+            const stateKey = `${ic.instanceId}_${gate.id}`;
+            if (!this.dffState[stateKey]) {
+              this.dffState[stateKey] = { q: DigitalSignal.LOW, prevClk: DigitalSignal.LOW };
+            }
+            const state = this.dffState[stateKey];
+            const [clrN, dVal, clkVal, prN] = gate.inputPinNumbers.map(
+              pinNum => preEdgeSignals[ic.pinIds[pinNum]] ?? DigitalSignal.FLOATING
+            );
+            const normalizedClk = clkVal === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+
+            if (clrN === DigitalSignal.LOW) {
+              state.q = DigitalSignal.LOW;
+            } else if (prN === DigitalSignal.LOW) {
+              state.q = DigitalSignal.HIGH;
+            } else if (state.prevClk === DigitalSignal.LOW && normalizedClk === DigitalSignal.HIGH) {
+              state.q = dVal === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+            }
+            state.prevClk = normalizedClk;
+
+            const qBar = state.q === DigitalSignal.HIGH ? DigitalSignal.LOW : DigitalSignal.HIGH;
+            outputSignals = [state.q, qBar];
+          } else if (gate.type === 'SHIFT_REG_7495') {
+            if (iteration > 1) continue;
+            const stateKey = `${ic.instanceId}_${gate.id}`;
+            if (!this.sr7495State[stateKey]) {
+              this.sr7495State[stateKey] = {
+                qa: DigitalSignal.LOW,
+                qb: DigitalSignal.LOW,
+                qc: DigitalSignal.LOW,
+                qd: DigitalSignal.LOW,
+                prevCk1: DigitalSignal.LOW,
+                prevCk2: DigitalSignal.LOW,
+              };
+            }
+            const state = this.sr7495State[stateKey];
+            const [ds, inA, inB, inC, inD, mode, ck1, ck2] = gate.inputPinNumbers.map(
+              pinNum => preEdgeSignals[ic.pinIds[pinNum]] ?? DigitalSignal.FLOATING
+            );
+            const normCk1 = ck1 === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+            const normCk2 = ck2 === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+
+            if (mode !== DigitalSignal.HIGH) {
+              // Mode 0: Serial Shift Right on CK1 rising edge
+              if (state.prevCk1 === DigitalSignal.LOW && normCk1 === DigitalSignal.HIGH) {
+                state.qd = state.qc;
+                state.qc = state.qb;
+                state.qb = state.qa;
+                state.qa = ds === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+              }
+            } else {
+              // Mode 1: Parallel Load on CK2 rising edge
+              if (state.prevCk2 === DigitalSignal.LOW && normCk2 === DigitalSignal.HIGH) {
+                state.qa = inA === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+                state.qb = inB === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+                state.qc = inC === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+                state.qd = inD === DigitalSignal.HIGH ? DigitalSignal.HIGH : DigitalSignal.LOW;
+              }
+            }
+            state.prevCk1 = normCk1;
+            state.prevCk2 = normCk2;
+
+            outputSignals = [state.qa, state.qb, state.qc, state.qd];
+          } else {
+            // Prevent JK Flip-Flop steering gate (7410) race-around oscillation on subsequent iterations
+            if (ic.definition.partNumber === '7410' && iteration > 1) {
+              const firstOutPin = this.pins[ic.pinIds[gate.outputPinNumbers[0]]];
+              if (firstOutPin && firstOutPin.signal !== DigitalSignal.FLOATING) {
+                continue;
+              }
+            }
+
+            const inputSignals = gate.inputPinNumbers.map(pinNum => {
+              const pinId = ic.pinIds[pinNum];
+              return this.pins[pinId]?.signal ?? DigitalSignal.LOW;
+            });
+
+            outputSignals = evaluateGate(gate.type, inputSignals);
+          }
 
           gate.outputPinNumbers.forEach((pinNum, idx) => {
             const outPinId = ic.pinIds[pinNum];
@@ -231,6 +341,10 @@ export class Circuit {
             if (outPin && outPin.signal !== newSig) {
               outPin.signal = newSig;
               changed = true;
+              // Gauss-Seidel immediate net resolution for deterministic latch feedback settling
+              if (pinToNet[outPinId]) {
+                resolveNet(pinToNet[outPinId]);
+              }
             }
           });
         }

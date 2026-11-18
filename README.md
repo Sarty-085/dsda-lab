@@ -6,13 +6,17 @@ An interactive, accurate, and responsive web-based Digital Electronics Laborator
 
 ## 🚀 Key Features
 
-- **6 Complete Experiments**:
-  1. **Exp 1**: Realization of Logic Gates using TTL ICs (7408 AND, 7432 OR, 7404 NOT, 7400 NAND, 7402 NOR, 7486 XOR).
-  2. **Exp 2**: Verification of Universal Gates (NAND & NOR implementations of NOT, AND, OR).
-  3. **Exp 3**: Design and Implementation of Half Adder & Full Adder using Logic Gates.
-  4. **Exp 4**: Design and Implementation of Half Subtractor & Full Subtractor using Logic Gates.
-  5. **Exp 5**: Design and Implementation of 3-bit Binary to Gray Code Converter & Gray to Binary Converter.
-  6. **Exp 6**: Verification of Truth Table of 4:1 Multiplexer (74153) and 1:4 Demultiplexer (74139).
+- **10 Complete Experiments**:
+  1. **Exp 1**: Truth Table Verification of Various Logic Gates (7404 NOT, 7408 AND, 7432 OR, 7400 NAND, 7402 NOR, 7486 XOR, XNOR).
+  2. **Exp 2**: Universal Gates (NAND 7400 & NOR 7402 realizations of NOT, AND, OR, NOR/NAND).
+  3. **Exp 3**: Construction of Half Adder and Full Adder (7486, 7408, 7432).
+  4. **Exp 4**: Construction of Half Subtractor and Full Subtractor (7486, 7404, 7408, 7432).
+  5. **Exp 5**: Construct Code Converters (4-bit Binary to Gray and Gray to Binary using 7486).
+  6. **Exp 6**: Realization of BCD Adder (2× 7483 4-bit Adders, 7408 AND, 7432 OR).
+  7. **Exp 7**: Construction and Implementation of Parity Bit Generator/Checker (Even & Odd Parity Generators and Checkers using 7486 & 7404).
+  8. **Exp 8**: Multiplexer and Demultiplexer (4:1 MUX and 1:4 DEMUX using logic gates: 7404, 2× 7411, 7432).
+  9. **Exp 9**: Verify the Truth Table of JK and D Flip-Flops (5-NAND D Flip-Flop using 2× 7400; JK Flip-Flop using 7410 & 7400).
+  10. **Exp 10**: Design SISO, SIPO Shift Register (2× 7474 Dual D Flip-Flop SISO/SIPO and IC 7495 4-Bit Shift Register).
 - **Interactive Virtual Breadboard**:
   - Realistic breadboard graphics with power rails (+5V / GND), tie-point columns (A–E, F–J), and DIP IC sockets.
   - Signal visualization: Distinct HIGH (Red / +5V) and LOW (Blue / 0V) color-coded wires and indicators.

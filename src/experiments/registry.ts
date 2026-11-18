@@ -5,6 +5,10 @@ import { EXP3_ADDERS } from './data/exp3';
 import { EXP4_SUBTRACTORS } from './data/exp4';
 import { EXP5_CODE_CONVERTERS } from './data/exp5';
 import { EXP6_BCD_ADDER } from './data/exp6';
+import { EXP7_PARITY } from './data/exp7';
+import { EXP8_MUX_DEMUX } from './data/exp8';
+import { EXP9_FLIPFLOPS } from './data/exp9';
+import { EXP10_SHIFT_REGISTERS } from './data/exp10';
 
 export const EXPERIMENTS: Experiment[] = [
   EXP1_LOGIC_GATES,
@@ -13,6 +17,10 @@ export const EXPERIMENTS: Experiment[] = [
   EXP4_SUBTRACTORS,
   EXP5_CODE_CONVERTERS,
   EXP6_BCD_ADDER,
+  EXP7_PARITY,
+  EXP8_MUX_DEMUX,
+  EXP9_FLIPFLOPS,
+  EXP10_SHIFT_REGISTERS,
 ];
 
 export function getAllExperiments(): Experiment[] {

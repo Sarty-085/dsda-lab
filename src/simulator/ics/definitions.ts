@@ -194,6 +194,99 @@ export const IC_7483: ICDefinition = {
   }
 };
 
+// IC 7411: Triple 3-Input AND Gate (14-Pin DIP)
+export const IC_7411: ICDefinition = {
+  partNumber: '7411',
+  name: 'Triple 3-Input AND Gate',
+  description: 'Three independent 3-input AND gates.',
+  packageType: 'DIP14',
+  pinCount: 14,
+  vccPin: 14,
+  gndPin: 7,
+  gates: [
+    { id: 'gate1', type: 'AND', inputPinNumbers: [1, 2, 13], outputPinNumbers: [12], label: '(1A, 1B, 1C) -> 1Y' },
+    { id: 'gate2', type: 'AND', inputPinNumbers: [3, 4, 5], outputPinNumbers: [6], label: '(2A, 2B, 2C) -> 2Y' },
+    { id: 'gate3', type: 'AND', inputPinNumbers: [9, 10, 11], outputPinNumbers: [8], label: '(3A, 3B, 3C) -> 3Y' },
+  ],
+  pinLabels: {
+    1: '1A', 2: '1B', 3: '2A', 4: '2B', 5: '2C', 6: '2Y', 7: 'GND',
+    8: '3Y', 9: '3A', 10: '3B', 11: '3C', 12: '1Y', 13: '1C', 14: 'VCC',
+  },
+  pinDirections: {
+    1: 'INPUT', 2: 'INPUT', 3: 'INPUT', 4: 'INPUT', 5: 'INPUT', 6: 'OUTPUT', 7: 'GROUND',
+    8: 'OUTPUT', 9: 'INPUT', 10: 'INPUT', 11: 'INPUT', 12: 'OUTPUT', 13: 'INPUT', 14: 'POWER',
+  },
+};
+
+// IC 7410: Triple 3-Input NAND Gate (14-Pin DIP)
+export const IC_7410: ICDefinition = {
+  partNumber: '7410',
+  name: 'Triple 3-Input NAND Gate',
+  description: 'Three independent 3-input NAND gates.',
+  packageType: 'DIP14',
+  pinCount: 14,
+  vccPin: 14,
+  gndPin: 7,
+  gates: [
+    { id: 'gate1', type: 'NAND', inputPinNumbers: [1, 2, 13], outputPinNumbers: [12], label: '(1A, 1B, 1C) -> 1Y' },
+    { id: 'gate2', type: 'NAND', inputPinNumbers: [3, 4, 5], outputPinNumbers: [6], label: '(2A, 2B, 2C) -> 2Y' },
+    { id: 'gate3', type: 'NAND', inputPinNumbers: [9, 10, 11], outputPinNumbers: [8], label: '(3A, 3B, 3C) -> 3Y' },
+  ],
+  pinLabels: {
+    1: '1A', 2: '1B', 3: '2A', 4: '2B', 5: '2C', 6: '2Y', 7: 'GND',
+    8: '3Y', 9: '3A', 10: '3B', 11: '3C', 12: '1Y', 13: '1C', 14: 'VCC',
+  },
+  pinDirections: {
+    1: 'INPUT', 2: 'INPUT', 3: 'INPUT', 4: 'INPUT', 5: 'INPUT', 6: 'OUTPUT', 7: 'GROUND',
+    8: 'OUTPUT', 9: 'INPUT', 10: 'INPUT', 11: 'INPUT', 12: 'OUTPUT', 13: 'INPUT', 14: 'POWER',
+  },
+};
+
+// IC 7474: Dual Positive-Edge-Triggered D Flip-Flop with Preset and Clear (14-Pin DIP)
+export const IC_7474: ICDefinition = {
+  partNumber: '7474',
+  name: 'Dual D Flip-Flop with Preset and Clear',
+  description: 'Two independent positive-edge-triggered D-type flip-flops with active-low Preset and Clear.',
+  packageType: 'DIP14',
+  pinCount: 14,
+  vccPin: 14,
+  gndPin: 7,
+  gates: [
+    { id: 'ff1', type: 'D_FF_7474', inputPinNumbers: [1, 2, 3, 4], outputPinNumbers: [5, 6], label: "FF1 (1CLR', 1D, 1CK, 1PR') -> (1Q, 1Q')" },
+    { id: 'ff2', type: 'D_FF_7474', inputPinNumbers: [13, 12, 11, 10], outputPinNumbers: [9, 8], label: "FF2 (2CLR', 2D, 2CK, 2PR') -> (2Q, 2Q')" },
+  ],
+  pinLabels: {
+    1: "1CLR'", 2: '1D', 3: '1CK', 4: "1PR'", 5: '1Q', 6: "1Q'", 7: 'GND',
+    8: "2Q'", 9: '2Q', 10: "2PR'", 11: '2CK', 12: '2D', 13: "2CLR'", 14: 'VCC',
+  },
+  pinDirections: {
+    1: 'INPUT', 2: 'INPUT', 3: 'INPUT', 4: 'INPUT', 5: 'OUTPUT', 6: 'OUTPUT', 7: 'GROUND',
+    8: 'OUTPUT', 9: 'OUTPUT', 10: 'INPUT', 11: 'INPUT', 12: 'INPUT', 13: 'INPUT', 14: 'POWER',
+  },
+};
+
+// IC 7495: 4-Bit Parallel-Access Shift Register (14-Pin DIP)
+export const IC_7495: ICDefinition = {
+  partNumber: '7495',
+  name: '4-Bit Parallel-Access Shift Register',
+  description: '4-bit shift register supporting serial right shift (Mode 0, CK1) and parallel load (Mode 1, CK2).',
+  packageType: 'DIP14',
+  pinCount: 14,
+  vccPin: 14,
+  gndPin: 7,
+  gates: [
+    { id: 'sr1', type: 'SHIFT_REG_7495', inputPinNumbers: [1, 2, 3, 4, 5, 6, 9, 8], outputPinNumbers: [13, 12, 11, 10], label: '4-Bit Shift Register' },
+  ],
+  pinLabels: {
+    1: 'DS', 2: 'A', 3: 'B', 4: 'C', 5: 'D', 6: 'M', 7: 'GND',
+    8: 'CK2', 9: 'CK1', 10: 'QD', 11: 'QC', 12: 'QB', 13: 'QA', 14: 'VCC',
+  },
+  pinDirections: {
+    1: 'INPUT', 2: 'INPUT', 3: 'INPUT', 4: 'INPUT', 5: 'INPUT', 6: 'INPUT', 7: 'GROUND',
+    8: 'INPUT', 9: 'INPUT', 10: 'OUTPUT', 11: 'OUTPUT', 12: 'OUTPUT', 13: 'OUTPUT', 14: 'POWER',
+  },
+};
+
 export const IC_CATALOG: Record<string, ICDefinition> = {
   '7404': IC_7404,
   '7408': IC_7408,
@@ -202,4 +295,8 @@ export const IC_CATALOG: Record<string, ICDefinition> = {
   '7402': IC_7402,
   '7486': IC_7486,
   '7483': IC_7483,
+  '7411': IC_7411,
+  '7410': IC_7410,
+  '7474': IC_7474,
+  '7495': IC_7495,
 };

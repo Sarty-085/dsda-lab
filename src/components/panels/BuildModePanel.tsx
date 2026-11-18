@@ -37,9 +37,9 @@ export const BuildModePanel: React.FC<BuildModePanelProps> = ({
   // Helper to categorize wire into logical lab sequence
   const getWireCategory = (wire: any) => {
     const lbl = (wire.label ?? wire.id).toLowerCase();
-    if (lbl.includes('vcc') || lbl.includes('gnd') || lbl.includes('power')) return '1. Power & Ground Rails';
+    if (lbl.includes('vcc') || lbl.includes('gnd') || lbl.includes('power') || lbl.includes('+5v')) return '1. Power & Ground Rails';
     if (lbl.includes('led') || lbl.includes('output') || lbl.includes('diff') || lbl.includes('sum') || lbl.includes('borrow') || lbl.includes('carry')) return '4. Output LED Indicators';
-    if (lbl.includes('tie') || lbl.includes('inter') || lbl.includes('cascade') || lbl.includes('gate 2') || lbl.includes('gate 3')) return '3. Inter-Gate Connections';
+    if (lbl.includes('tie') || lbl.includes('inter') || lbl.includes('cascade') || lbl.includes('feedback') || lbl.includes('latch') || lbl.includes('-> ff') || lbl.includes('-> xor') || lbl.includes('-> and') || lbl.includes('-> or') || lbl.includes('-> not') || lbl.includes('-> nand')) return '3. Inter-Gate Connections';
     return '2. Input Switch Lines';
   };
 

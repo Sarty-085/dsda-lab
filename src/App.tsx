@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { EXPERIMENTS, getExperimentById } from './experiments/registry';
 import { buildCircuitFromConfig } from './simulator/circuitFactory';
 import { DigitalSignal } from './simulator/engine/types';
+import { createEmptySeqMemory } from './workbench/workbenchEngine';
+import { WorkbenchSessionData } from './workbench/workbenchTypes';
 
 import { AppSection, Header } from './components/layout/Header';
 import { LandingPage } from './components/layout/LandingPage';
@@ -13,17 +15,27 @@ import { VivaVoce } from './components/panels/VivaVoce';
 import { PracticeQuiz } from './components/panels/PracticeQuiz';
 import { ObservationTable } from './components/panels/ObservationTable';
 import { TheoryPanel } from './components/panels/TheoryPanel';
-import { CustomWorkbench } from './components/workbench/CustomWorkbench';
+import {
+  CustomWorkbench,
+  loadSavedWorkbenchSession,
+  saveWorkbenchSession,
+} from './components/workbench/CustomWorkbench';
 
 type ActiveTab = 'SIMULATOR' | 'THEORY' | 'OBSERVATIONS' | 'VIVA' | 'QUIZ';
 
 export const App: React.FC = () => {
   // Top-level Workspace Section: Landing Page | Experiment Guides | Custom Workbench
   const [activeSection, setActiveSection] = useState<AppSection>('HOME');
-  const [workbenchPracticeTarget, setWorkbenchPracticeTarget] = useState<{
-    expId: string | null;
-    subId: string | null;
-  }>({ expId: null, subId: null });
+
+  // Persistent Custom Workbench session (retained across section switches & page reloads)
+  const [workbenchSession, setWorkbenchSession] = useState<WorkbenchSessionData>(
+    loadSavedWorkbenchSession
+  );
+  const workbenchSeqMemRef = useRef(createEmptySeqMemory());
+
+  useEffect(() => {
+    saveWorkbenchSession(workbenchSession);
+  }, [workbenchSession]);
 
   // Active Experiment & Subcircuit state
   const [currentExpId, setCurrentExpId] = useState<string>('exp1');
@@ -188,9 +200,6 @@ export const App: React.FC = () => {
         activeSection={activeSection}
         onChangeSection={(sec) => {
           setActiveSection(sec);
-          if (sec === 'WORKBENCH') {
-            setWorkbenchPracticeTarget({ expId: null, subId: null });
-          }
         }}
         selectedExp={currentExp}
         selectedSub={currentSub}
@@ -212,10 +221,15 @@ export const App: React.FC = () => {
               setActiveSection('EXPERIMENTS');
             }}
             onOpenWorkbench={(practiceExpId, practiceSubId) => {
-              setWorkbenchPracticeTarget({
-                expId: practiceExpId ?? null,
-                subId: practiceSubId ?? null,
-              });
+              if (practiceExpId) {
+                const exp = getExperimentById(practiceExpId);
+                const subId = practiceSubId || exp?.subCircuits[0]?.id || '';
+                setWorkbenchSession(prev => ({
+                  ...prev,
+                  practiceExpId,
+                  practiceSubId: subId,
+                }));
+              }
               setActiveSection('WORKBENCH');
             }}
           />
@@ -226,8 +240,12 @@ export const App: React.FC = () => {
       {activeSection === 'WORKBENCH' && (
         <main className="flex-1">
           <CustomWorkbench
-            initialPracticeExpId={workbenchPracticeTarget.expId}
-            initialPracticeSubId={workbenchPracticeTarget.subId}
+            session={workbenchSession}
+            onUpdateSession={setWorkbenchSession}
+            seqMem={workbenchSeqMemRef.current}
+            onResetSeqMem={() => {
+              workbenchSeqMemRef.current = createEmptySeqMemory();
+            }}
           />
         </main>
       )}
@@ -282,7 +300,11 @@ export const App: React.FC = () => {
 
                 <button
                   onClick={() => {
-                    setWorkbenchPracticeTarget({ expId: currentExp.id, subId: currentSub.id });
+                    setWorkbenchSession(prev => ({
+                      ...prev,
+                      practiceExpId: currentExp.id,
+                      practiceSubId: currentSub.id,
+                    }));
                     setActiveSection('WORKBENCH');
                   }}
                   className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 text-amber-300 text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors shrink-0"

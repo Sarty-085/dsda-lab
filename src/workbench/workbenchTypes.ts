@@ -42,6 +42,7 @@ export interface PlacedWire {
   a: string; // Terminal ID
   b: string; // Terminal ID
   color: string;
+  curveOffset?: { dx: number; dy: number };
 }
 
 export type SelectionTarget =
@@ -126,4 +127,58 @@ export interface SequentialMemory {
     prevCk2: 0 | 1;
   }>;
   latchVals: Record<string, LogicLevel>;
+}
+
+export type PracticeHint =
+  | {
+      kind: 'toggle-psu';
+      title: string;
+      detail: string;
+    }
+  | {
+      kind: 'place-ic';
+      title: string;
+      detail: string;
+      icType: SupportedICType;
+      pinCount: 14 | 16;
+      suggestedCol: number;
+    }
+  | {
+      kind: 'place-resistor';
+      title: string;
+      detail: string;
+      a: string;
+      b: string;
+    }
+  | {
+      kind: 'place-led';
+      title: string;
+      detail: string;
+      anode: string;
+      cathode: string;
+      color: LEDColor;
+      label?: string;
+    }
+  | {
+      kind: 'wire';
+      title: string;
+      detail: string;
+      fromHole: string;
+      toHole: string;
+      color?: string;
+    }
+  | {
+      kind: 'complete';
+      title: string;
+      detail: string;
+    };
+
+export interface WorkbenchSessionData {
+  state: WorkbenchState;
+  undoStack: string[];
+  redoStack: string[];
+  loggedRows: LoggedTruthRow[];
+  samples: LogicSample[];
+  practiceExpId: string;
+  practiceSubId: string;
 }

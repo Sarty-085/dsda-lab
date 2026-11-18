@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import { EXPERIMENTS } from '../experiments/registry';
 import { createEmptySeqMemory, simulateWorkbench } from '../workbench/workbenchEngine';
 import { WorkbenchState } from '../workbench/workbenchTypes';
-import { evaluatePracticeProgress } from '../workbench/practiceGuides';
+import {
+  applyPracticeHintStep,
+  computePracticeNextHint,
+  evaluatePracticeProgress,
+} from '../workbench/practiceGuides';
 
 function baseWorkbench(): WorkbenchState {
   return {
@@ -166,5 +171,58 @@ describe('Custom Breadboard Workbench Simulation Engine', () => {
     expect(prog!.milestones[1].completed).toBe(true); // 7486 + 7408 + 2 LEDs + 2 resistors placed
     expect(prog!.milestones[2].completed).toBe(true); // Both ICs powered
     expect(prog!.milestones[3].completed).toBe(false); // Inputs & LED outputs not wired yet!
+  });
+
+  it('adapts context-aware next-step hints dynamically around user placements and guides all 30 subcircuits to completion', () => {
+    // 1. User places IC 7486 at custom column 18 for Half Adder -> next hint guides placing 7408 elsewhere & wiring relative to col 18
+    const seqCustom = createEmptySeqMemory();
+    const sCustom = baseWorkbench();
+    sCustom.psu = true;
+    sCustom.ics = [{ id: 1, type: '7486', col: 18, pinCount: 14 }];
+    sCustom.wires = [
+      { id: 2, a: 'PSU+', b: 'Rt+:0', color: '#ef4444', curveOffset: { dx: 10, dy: -20 } },
+      { id: 3, a: 'PSUG', b: 'Rt-:1', color: '#334155' },
+    ];
+    let sim = simulateWorkbench(sCustom, seqCustom);
+    const hint1 = computePracticeNextHint('exp3', 'half_adder', sCustom, sim);
+    expect(hint1?.kind).toBe('place-ic');
+    if (hint1?.kind === 'place-ic') {
+      expect(hint1.icType).toBe('7408');
+      // Must not overlap user's IC at col 18..24
+      expect(hint1.suggestedCol + 7 <= 18 || hint1.suggestedCol >= 25).toBe(true);
+    }
+
+    // 2. Drive EVERY subcircuit across Experiments 1–10 from an empty powered-off board to completion
+    for (const exp of EXPERIMENTS) {
+      for (const sub of exp.subCircuits) {
+        const mem = createEmptySeqMemory();
+        let st = baseWorkbench();
+        st.psu = false;
+        let safety = 0;
+        let reachedComplete = false;
+
+        while (safety < 80) {
+          safety++;
+          const currSim = simulateWorkbench(st, mem);
+          const hint = computePracticeNextHint(exp.id, sub.id, st, currSim);
+          expect(hint).not.toBeNull();
+          if (hint!.kind === 'complete') {
+            reachedComplete = true;
+            break;
+          }
+          st = applyPracticeHintStep(hint!, st);
+        }
+
+        expect(reachedComplete, `Failed to complete ${exp.id}/${sub.id} within 80 steps`).toBe(true);
+        const finalSim = simulateWorkbench(st, mem);
+        expect(finalSim.shortCircuit, `Short circuit in ${exp.id}/${sub.id}`).toBe(false);
+        expect(
+          finalSim.messages.filter(m => m.severity === 'error'),
+          `Errors in ${exp.id}/${sub.id}`
+        ).toEqual([]);
+        const finalEval = evaluatePracticeProgress(exp.id, sub.id, st, finalSim);
+        expect(finalEval?.allReadyToVerify, `Practice milestones incomplete for ${exp.id}/${sub.id}`).toBe(true);
+      }
+    }
   });
 });

@@ -4,14 +4,14 @@ import { IC_CATALOG } from '../../simulator/ics/definitions';
 import {
   ArmedTool,
   LEDColor,
-  LoggedTruthRow,
   LogicLevel,
-  LogicSample,
   SelectionTarget,
+  SequentialMemory,
   SupportedICType,
+  WorkbenchSessionData,
   WorkbenchState,
 } from '../../workbench/workbenchTypes';
-import { createEmptySeqMemory, simulateWorkbench } from '../../workbench/workbenchEngine';
+import { simulateWorkbench } from '../../workbench/workbenchEngine';
 import {
   computeTwoPinSpan,
   cycleTwoPinOrientation,
@@ -20,12 +20,103 @@ import {
   getNodeKey,
   WB_COLS,
 } from '../../workbench/workbenchGeometry';
-import { evaluatePracticeProgress } from '../../workbench/practiceGuides';
+import {
+  applyPracticeHintStep,
+  computePracticeNextHint,
+  evaluatePracticeProgress,
+} from '../../workbench/practiceGuides';
+import { CircuitSchematic } from './CircuitSchematic';
 import { WorkbenchCanvas } from './WorkbenchCanvas';
 
+const STORAGE_KEY = 'dsda_custom_workbench_session_v1';
+
+export function createDefaultWorkbenchState(): WorkbenchState {
+  return {
+    psu: true,
+    p: [0, 0],
+    clkActive: false,
+    clkLevel: 0,
+    ics: [],
+    resistors: [],
+    leds: [],
+    wires: [],
+    nid: 1,
+  };
+}
+
+export function createDefaultWorkbenchSession(
+  practiceExpId = 'sandbox',
+  practiceSubId = ''
+): WorkbenchSessionData {
+  return {
+    state: createDefaultWorkbenchState(),
+    undoStack: [],
+    redoStack: [],
+    loggedRows: [],
+    samples: [],
+    practiceExpId,
+    practiceSubId,
+  };
+}
+
+export function loadSavedWorkbenchSession(): WorkbenchSessionData {
+  const fallback = createDefaultWorkbenchSession();
+  if (typeof window === 'undefined' || !window.localStorage) return fallback;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<WorkbenchSessionData>;
+    if (!parsed || !parsed.state || !Array.isArray(parsed.state.ics) || !Array.isArray(parsed.state.wires)) {
+      return fallback;
+    }
+    return {
+      state: {
+        psu: Boolean(parsed.state.psu),
+        p: Array.isArray(parsed.state.p) && parsed.state.p.length === 2 ? [parsed.state.p[0] ? 1 : 0, parsed.state.p[1] ? 1 : 0] : [0, 0],
+        clkActive: Boolean(parsed.state.clkActive),
+        clkLevel: parsed.state.clkLevel === 1 ? 1 : 0,
+        ics: parsed.state.ics,
+        resistors: Array.isArray(parsed.state.resistors) ? parsed.state.resistors : [],
+        leds: Array.isArray(parsed.state.leds) ? parsed.state.leds : [],
+        wires: parsed.state.wires,
+        nid: typeof parsed.state.nid === 'number' ? parsed.state.nid : 1,
+      },
+      undoStack: Array.isArray(parsed.undoStack) ? parsed.undoStack.slice(-80) : [],
+      redoStack: Array.isArray(parsed.redoStack) ? parsed.redoStack.slice(-80) : [],
+      loggedRows: Array.isArray(parsed.loggedRows) ? parsed.loggedRows : [],
+      samples: Array.isArray(parsed.samples) ? parsed.samples.slice(-40) : [],
+      practiceExpId: typeof parsed.practiceExpId === 'string' ? parsed.practiceExpId : 'sandbox',
+      practiceSubId: typeof parsed.practiceSubId === 'string' ? parsed.practiceSubId : '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveWorkbenchSession(session: WorkbenchSessionData): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // Ignore storage quota / privacy errors
+  }
+}
+
+function serializeWorkbenchSnapshot(curr: WorkbenchState): string {
+  return JSON.stringify({
+    ics: curr.ics,
+    resistors: curr.resistors,
+    leds: curr.leds,
+    wires: curr.wires,
+    nid: curr.nid,
+  });
+}
+
 interface CustomWorkbenchProps {
-  initialPracticeExpId?: string | null;
-  initialPracticeSubId?: string | null;
+  session: WorkbenchSessionData;
+  onUpdateSession: React.Dispatch<React.SetStateAction<WorkbenchSessionData>>;
+  seqMem: SequentialMemory;
+  onResetSeqMem: () => void;
 }
 
 const LIBRARY_ICS: { type: SupportedICType; category: 'gate' | 'seq' }[] = [
@@ -52,29 +143,13 @@ function pickWireColor(a: string, b: string, nid: number): string {
   return WIRE_PALETTE[nid % WIRE_PALETTE.length];
 }
 
-function defaultState(): WorkbenchState {
-  return {
-    psu: true,
-    p: [0, 0],
-    clkActive: false,
-    clkLevel: 0,
-    ics: [],
-    resistors: [],
-    leds: [],
-    wires: [],
-    nid: 1,
-  };
-}
-
 export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
-  initialPracticeExpId = null,
-  initialPracticeSubId = null,
+  session,
+  onUpdateSession,
+  seqMem,
+  onResetSeqMem,
 }) => {
-  const [state, setState] = useState<WorkbenchState>(defaultState);
-  const [undoStack, setUndoStack] = useState<string[]>([]);
-  const [redoStack, setRedoStack] = useState<string[]>([]);
-
-  const seqMemRef = useRef(createEmptySeqMemory());
+  const { state, undoStack, redoStack, loggedRows, samples, practiceExpId, practiceSubId } = session;
 
   const [selection, setSelection] = useState<SelectionTarget | null>(null);
   const [armedTool, setArmedTool] = useState<ArmedTool>(null);
@@ -89,16 +164,15 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
     typeof window !== 'undefined' && window.innerWidth < 768 ? 900 : null
   );
 
-  // Filters & Mobile Tab Organization
+  // Filters, Sidebar Tabs, Diagram & Hint Assist Toggles
   const [libFilter, setLibFilter] = useState<'all' | 'parts' | 'gate' | 'seq'>('all');
   const [sideTab, setSideTab] = useState<'practice' | 'inspector'>('practice');
   const [bottomMobileTab, setBottomMobileTab] = useState<'tt' | 'analyser' | 'status'>('tt');
 
-  // Practice Experiment Selector
-  const [practiceExpId, setPracticeExpId] = useState<string>(initialPracticeExpId || 'sandbox');
-  const [practiceSubId, setPracticeSubId] = useState<string>(initialPracticeSubId || '');
   const [expandedHintId, setExpandedHintId] = useState<string | null>(null);
   const [showTargetTable, setShowTargetTable] = useState<boolean>(false);
+  const [showDiagram, setShowDiagram] = useState<boolean>(true);
+  const [showNextHint, setShowNextHint] = useState<boolean>(true);
 
   // Drag ghost state
   const [dragItem, setDragItem] = useState<{
@@ -109,23 +183,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
   } | null>(null);
   const [ghostPos, setGhostPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Logs & Logic Analyser Samples
-  const [loggedRows, setLoggedRows] = useState<LoggedTruthRow[]>([]);
-  const [samples, setSamples] = useState<LogicSample[]>([]);
   const lastSampleSigRef = useRef<string>('');
-
-  // Sync incoming initial practice props when jumping from Experiments section
-  useEffect(() => {
-    if (initialPracticeExpId) {
-      setPracticeExpId(initialPracticeExpId);
-      const exp = EXPERIMENTS.find(e => e.id === initialPracticeExpId);
-      if (exp) {
-        const sub = exp.subCircuits.find(s => s.id === initialPracticeSubId) || exp.subCircuits[0];
-        setPracticeSubId(sub.id);
-      }
-      setSideTab('practice');
-    }
-  }, [initialPracticeExpId, initialPracticeSubId]);
 
   const showFlash = (msg: string) => {
     setFlashMsg(msg);
@@ -137,49 +195,54 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
     return () => clearTimeout(t);
   }, [flashMsg]);
 
-  // Helper to push snapshot to undo history
-  const pushUndo = (curr: WorkbenchState) => {
-    const snap = JSON.stringify({
-      ics: curr.ics,
-      resistors: curr.resistors,
-      leds: curr.leds,
-      wires: curr.wires,
-      nid: curr.nid,
+  // Atomic workbench update helper with optional undo history capture
+  const commitStateUpdate = (
+    updater: (prev: WorkbenchState) => WorkbenchState,
+    recordUndo = true
+  ) => {
+    onUpdateSession(prev => {
+      const nextState = updater(prev.state);
+      return {
+        ...prev,
+        undoStack: recordUndo
+          ? [...prev.undoStack.slice(-80), serializeWorkbenchSnapshot(prev.state)]
+          : prev.undoStack,
+        redoStack: recordUndo ? [] : prev.redoStack,
+        state: nextState,
+      };
     });
-    setUndoStack(prev => [...prev.slice(-80), snap]);
-    setRedoStack([]);
   };
 
   const handleUndo = () => {
     if (undoStack.length === 0) return;
-    const prevSnap = undoStack[undoStack.length - 1];
-    const currSnap = JSON.stringify({
-      ics: state.ics,
-      resistors: state.resistors,
-      leds: state.leds,
-      wires: state.wires,
-      nid: state.nid,
+    onUpdateSession(prev => {
+      if (prev.undoStack.length === 0) return prev;
+      const prevSnap = prev.undoStack[prev.undoStack.length - 1];
+      const currSnap = serializeWorkbenchSnapshot(prev.state);
+      return {
+        ...prev,
+        undoStack: prev.undoStack.slice(0, -1),
+        redoStack: [...prev.redoStack, currSnap],
+        state: { ...prev.state, ...JSON.parse(prevSnap) },
+      };
     });
-    setRedoStack(r => [...r, currSnap]);
-    setUndoStack(u => u.slice(0, -1));
-    setState(s => ({ ...s, ...JSON.parse(prevSnap) }));
     setSelection(null);
     setPendingWireStart(null);
   };
 
   const handleRedo = () => {
     if (redoStack.length === 0) return;
-    const nextSnap = redoStack[redoStack.length - 1];
-    const currSnap = JSON.stringify({
-      ics: state.ics,
-      resistors: state.resistors,
-      leds: state.leds,
-      wires: state.wires,
-      nid: state.nid,
+    onUpdateSession(prev => {
+      if (prev.redoStack.length === 0) return prev;
+      const nextSnap = prev.redoStack[prev.redoStack.length - 1];
+      const currSnap = serializeWorkbenchSnapshot(prev.state);
+      return {
+        ...prev,
+        redoStack: prev.redoStack.slice(0, -1),
+        undoStack: [...prev.undoStack, currSnap],
+        state: { ...prev.state, ...JSON.parse(nextSnap) },
+      };
     });
-    setUndoStack(u => [...u, currSnap]);
-    setRedoStack(r => r.slice(0, -1));
-    setState(s => ({ ...s, ...JSON.parse(nextSnap) }));
     setSelection(null);
     setPendingWireStart(null);
   };
@@ -187,14 +250,14 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
   // Continuous Square-Wave Pulse Generator Timer
   useEffect(() => {
     if (!state.clkActive || !state.psu) return;
-    const intervalMs = Math.round(500 / clockHz); // half-period
+    const intervalMs = Math.round(500 / clockHz);
     const timer = setInterval(() => {
-      setState(s => ({ ...s, clkLevel: s.clkLevel === 1 ? 0 : 1 }));
+      commitStateUpdate(s => ({ ...s, clkLevel: s.clkLevel === 1 ? 0 : 1 }), false);
     }, intervalMs);
     return () => clearInterval(timer);
   }, [state.clkActive, state.psu, clockHz]);
 
-  // Keep drag ghost tracking globally and clean up if dropped outside SVG
+  // Global drag ghost cursor cleanup
   useEffect(() => {
     if (!dragItem) return;
     const onMove = (e: PointerEvent) => setGhostPos({ x: e.clientX, y: e.clientY });
@@ -212,8 +275,8 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
 
   // Run simulation synchronously when state updates
   const sim = useMemo(() => {
-    return simulateWorkbench(state, seqMemRef.current);
-  }, [state]);
+    return simulateWorkbench(state, seqMem);
+  }, [state, seqMem]);
 
   // Record waveform samples whenever active channel levels change
   useEffect(() => {
@@ -224,9 +287,12 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       lastSampleSigRef.current = sig;
       const map: Record<string, LogicLevel> = {};
       for (const ch of allChannels) map[ch.id] = ch.value;
-      setSamples(prev => [...prev.slice(-39), { timestamp: Date.now(), channels: map }]);
+      onUpdateSession(prev => ({
+        ...prev,
+        samples: [...prev.samples.slice(-39), { timestamp: Date.now(), channels: map }],
+      }));
     }
-  }, [sim, state.psu]);
+  }, [sim, state.psu, onUpdateSession]);
 
   // Occupied IC holes set (row e & f holes under IC pins)
   const getOccupiedICHoles = (excludeIcId?: number) => {
@@ -280,15 +346,32 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       return;
     }
 
-    pushUndo(state);
     const id = state.nid;
     const color = pickWireColor(a, b, id);
-    setState(s => ({
-      ...s,
-      nid: s.nid + 1,
-      wires: [...s.wires, { id, a, b, color }],
-    }));
+    commitStateUpdate(
+      s => ({
+        ...s,
+        nid: s.nid + 1,
+        wires: [...s.wires, { id: s.nid, a, b, color }],
+      }),
+      true
+    );
     setSelection({ kind: 'wire', id });
+  };
+
+  // Flex / bend wire curve interactively
+  const handleFlexWire = (
+    wireId: number,
+    curveOffset: { dx: number; dy: number },
+    commitUndo: boolean
+  ) => {
+    commitStateUpdate(
+      s => ({
+        ...s,
+        wires: s.wires.map(w => (w.id === wireId ? { ...w, curveOffset } : w)),
+      }),
+      commitUndo
+    );
   };
 
   // Drop or tap placement on breadboard
@@ -303,18 +386,19 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         : null
       : armedTool;
 
-    // Moving an existing placed IC
     if (dragItem?.kind === 'move-ic' && dragItem.id !== undefined) {
       const existing = state.ics.find(i => i.id === dragItem.id);
       if (existing) {
         const half = existing.pinCount / 2;
         const targetCol = Math.max(0, Math.min(WB_COLS - half, colGuess - Math.floor(half / 2)));
         if (targetCol !== existing.col && canPlaceIC(targetCol, existing.pinCount, existing.id)) {
-          pushUndo(state);
-          setState(s => ({
-            ...s,
-            ics: s.ics.map(i => (i.id === existing.id ? { ...i, col: targetCol } : i)),
-          }));
+          commitStateUpdate(
+            s => ({
+              ...s,
+              ics: s.ics.map(i => (i.id === existing.id ? { ...i, col: targetCol } : i)),
+            }),
+            true
+          );
         }
       }
       setDragItem(null);
@@ -322,18 +406,21 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       return;
     }
 
-    // Moving an existing Resistor
     if (dragItem?.kind === 'move-resistor' && dragItem.id !== undefined && holeId && !holeId.startsWith('P')) {
       const existing = state.resistors.find(r => r.id === dragItem.id);
       if (existing) {
         const span = computeTwoPinSpan(holeId, 3);
         const occ = getOccupiedICHoles();
         if (!occ.has(span.a) && !occ.has(span.b)) {
-          pushUndo(state);
-          setState(s => ({
-            ...s,
-            resistors: s.resistors.map(r => (r.id === existing.id ? { ...r, a: span.a, b: span.b } : r)),
-          }));
+          commitStateUpdate(
+            s => ({
+              ...s,
+              resistors: s.resistors.map(r =>
+                r.id === existing.id ? { ...r, a: span.a, b: span.b } : r
+              ),
+            }),
+            true
+          );
         }
       }
       setDragItem(null);
@@ -341,20 +428,21 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       return;
     }
 
-    // Moving an existing LED
     if (dragItem?.kind === 'move-led' && dragItem.id !== undefined && holeId && !holeId.startsWith('P')) {
       const existing = state.leds.find(l => l.id === dragItem.id);
       if (existing) {
         const span = computeTwoPinSpan(holeId, 2);
         const occ = getOccupiedICHoles();
         if (!occ.has(span.a) && !occ.has(span.b)) {
-          pushUndo(state);
-          setState(s => ({
-            ...s,
-            leds: s.leds.map(l =>
-              l.id === existing.id ? { ...l, anode: span.a, cathode: span.b } : l
-            ),
-          }));
+          commitStateUpdate(
+            s => ({
+              ...s,
+              leds: s.leds.map(l =>
+                l.id === existing.id ? { ...l, anode: span.a, cathode: span.b } : l
+              ),
+            }),
+            true
+          );
         }
       }
       setDragItem(null);
@@ -373,15 +461,16 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       const half = pinCount / 2;
       const col = Math.max(0, Math.min(WB_COLS - half, colGuess - Math.floor(half / 2)));
       if (canPlaceIC(col, pinCount)) {
-        pushUndo(state);
         const id = state.nid;
-        setState(s => ({
-          ...s,
-          nid: s.nid + 1,
-          ics: [...s.ics, { id, type: tool.type, col, pinCount }],
-        }));
+        commitStateUpdate(
+          s => ({
+            ...s,
+            nid: s.nid + 1,
+            ics: [...s.ics, { id: s.nid, type: tool.type, col, pinCount }],
+          }),
+          true
+        );
         setSelection({ kind: 'ic', id });
-        setSideTab('inspector');
       }
       setArmedTool(null);
       return;
@@ -397,13 +486,15 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         showFlash('Cannot place resistor directly into an IC pin e/f hole; choose open rows.');
         return;
       }
-      pushUndo(state);
       const id = state.nid;
-      setState(s => ({
-        ...s,
-        nid: s.nid + 1,
-        resistors: [...s.resistors, { id, a: span.a, b: span.b, ohms: 330 }],
-      }));
+      commitStateUpdate(
+        s => ({
+          ...s,
+          nid: s.nid + 1,
+          resistors: [...s.resistors, { id: s.nid, a: span.a, b: span.b, ohms: 330 }],
+        }),
+        true
+      );
       setSelection({ kind: 'resistor', id });
       setArmedTool(null);
       return;
@@ -419,16 +510,18 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         showFlash('Cannot place LED legs directly into occupied IC holes; choose rows a–d or g–j.');
         return;
       }
-      pushUndo(state);
       const id = state.nid;
-      setState(s => ({
-        ...s,
-        nid: s.nid + 1,
-        leds: [
-          ...s.leds,
-          { id, anode: span.a, cathode: span.b, color: tool.color, label: `LED${s.leds.length + 1}` },
-        ],
-      }));
+      commitStateUpdate(
+        s => ({
+          ...s,
+          nid: s.nid + 1,
+          leds: [
+            ...s.leds,
+            { id: s.nid, anode: span.a, cathode: span.b, color: tool.color, label: `LED${s.leds.length + 1}` },
+          ],
+        }),
+        true
+      );
       setSelection({ kind: 'led', id });
       setArmedTool(null);
       return;
@@ -438,14 +531,16 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
   // Delete currently selected component
   const handleDeleteSelected = () => {
     if (!selection) return;
-    pushUndo(state);
-    setState(s => ({
-      ...s,
-      ics: selection.kind === 'ic' ? s.ics.filter(i => i.id !== selection.id) : s.ics,
-      resistors: selection.kind === 'resistor' ? s.resistors.filter(r => r.id !== selection.id) : s.resistors,
-      leds: selection.kind === 'led' ? s.leds.filter(l => l.id !== selection.id) : s.leds,
-      wires: selection.kind === 'wire' ? s.wires.filter(w => w.id !== selection.id) : s.wires,
-    }));
+    commitStateUpdate(
+      s => ({
+        ...s,
+        ics: selection.kind === 'ic' ? s.ics.filter(i => i.id !== selection.id) : s.ics,
+        resistors: selection.kind === 'resistor' ? s.resistors.filter(r => r.id !== selection.id) : s.resistors,
+        leds: selection.kind === 'led' ? s.leds.filter(l => l.id !== selection.id) : s.leds,
+        wires: selection.kind === 'wire' ? s.wires.filter(w => w.id !== selection.id) : s.wires,
+      }),
+      true
+    );
     setSelection(null);
   };
 
@@ -473,18 +568,20 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
   // Nudge selected IC horizontally
   const handleNudge = (delta: -1 | 1) => {
     if (!selection) {
-      showFlash('Select an IC, LED, or Resistor first to nudge left/right.');
+      showFlash('Select an IC first to nudge left/right.');
       return;
     }
     if (selection.kind === 'ic') {
       const ic = state.ics.find(i => i.id === selection.id);
       if (!ic) return;
       if (canPlaceIC(ic.col + delta, ic.pinCount, ic.id)) {
-        pushUndo(state);
-        setState(s => ({
-          ...s,
-          ics: s.ics.map(i => (i.id === ic.id ? { ...i, col: i.col + delta } : i)),
-        }));
+        commitStateUpdate(
+          s => ({
+            ...s,
+            ics: s.ics.map(i => (i.id === ic.id ? { ...i, col: i.col + delta } : i)),
+          }),
+          true
+        );
       }
     }
   };
@@ -496,20 +593,24 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       const res = state.resistors.find(r => r.id === selection.id);
       if (!res) return;
       const next = cycleTwoPinOrientation(res.a, res.b, 3);
-      pushUndo(state);
-      setState(s => ({
-        ...s,
-        resistors: s.resistors.map(r => (r.id === res.id ? { ...r, a: next.a, b: next.b } : r)),
-      }));
+      commitStateUpdate(
+        s => ({
+          ...s,
+          resistors: s.resistors.map(r => (r.id === res.id ? { ...r, a: next.a, b: next.b } : r)),
+        }),
+        true
+      );
     } else if (selection.kind === 'led') {
       const led = state.leds.find(l => l.id === selection.id);
       if (!led) return;
       const next = cycleTwoPinOrientation(led.anode, led.cathode, 2);
-      pushUndo(state);
-      setState(s => ({
-        ...s,
-        leds: s.leds.map(l => (l.id === led.id ? { ...l, anode: next.a, cathode: next.b } : l)),
-      }));
+      commitStateUpdate(
+        s => ({
+          ...s,
+          leds: s.leds.map(l => (l.id === led.id ? { ...l, anode: next.a, cathode: next.b } : l)),
+        }),
+        true
+      );
     }
   };
 
@@ -529,15 +630,19 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
     const nextA = flipTerminal(selectedWire.a);
     const nextB = flipTerminal(selectedWire.b);
     if (nextA === selectedWire.a && nextB === selectedWire.b) return;
-    pushUndo(state);
     const nextColor = pickWireColor(nextA, nextB, selectedWire.id);
-    setState(s => ({
-      ...s,
-      wires: s.wires.map(w => (w.id === selectedWire.id ? { ...w, a: nextA, b: nextB, color: nextColor } : w)),
-    }));
+    commitStateUpdate(
+      s => ({
+        ...s,
+        wires: s.wires.map(w =>
+          w.id === selectedWire.id ? { ...w, a: nextA, b: nextB, color: nextColor } : w
+        ),
+      }),
+      true
+    );
   };
 
-  // Practice Guide calculation
+  // Practice Guide & Smart Context-Aware Hint Calculation
   const selectedExpObj = useMemo(
     () => (practiceExpId !== 'sandbox' ? EXPERIMENTS.find(e => e.id === practiceExpId) || null : null),
     [practiceExpId]
@@ -547,6 +652,16 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
     if (practiceExpId === 'sandbox') return null;
     return evaluatePracticeProgress(practiceExpId, practiceSubId, state, sim);
   }, [practiceExpId, practiceSubId, state, sim]);
+
+  const nextHint = useMemo(() => {
+    if (practiceExpId === 'sandbox') return null;
+    return computePracticeNextHint(practiceExpId, practiceSubId, state, sim);
+  }, [practiceExpId, practiceSubId, state, sim]);
+
+  const handleApplyNextHint = () => {
+    if (!nextHint || nextHint.kind === 'complete') return;
+    commitStateUpdate(s => applyPracticeHintStep(nextHint, s), true);
+  };
 
   // Format terminal probe readout
   const probeReadout = useMemo(() => {
@@ -560,7 +675,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
       if (!def) continue;
       for (let p = 1; p <= ic.pinCount; p++) {
         if (getNodeKey(getICPinHole(ic, p)) === nodeKey) {
-          icPinNote = ` · IC${i + 1} (${ic.type}) Pin ${p} [${def.pinLabels[p]}]`;
+          icPinNote = ` · IC${i + 1} (${ic.type}) Pin ${p} [${def.pinLabels[p]} · ${def.pinDirections[p]}]`;
         }
       }
     }
@@ -569,32 +684,32 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
     return `${formatTerminalLabel(probeId)}${icPinNote} → ${levelLabel}`;
   }, [probeId, sim, state.ics]);
 
-  // Selected items for Inspector
   const selectedIC = selection?.kind === 'ic' ? state.ics.find(i => i.id === selection.id) || null : null;
   const selectedLED = selection?.kind === 'led' ? state.leds.find(l => l.id === selection.id) || null : null;
   const selectedRes = selection?.kind === 'resistor' ? state.resistors.find(r => r.id === selection.id) || null : null;
 
-  // Filtered ICs
   const filteredICs = LIBRARY_ICS.filter(item => {
     if (libFilter === 'parts') return false;
     if (libFilter === 'all') return true;
     return item.category === libFilter;
   });
 
-  // Log Truth Table row
   const handleLogTruthRow = () => {
     if (sim.activeInputs.length === 0 && sim.activeOutputs.length === 0) {
       showFlash('Wire power/inputs and place at least one LED before logging a truth table row.');
       return;
     }
-    setLoggedRows(prev => [
+    onUpdateSession(prev => ({
       ...prev,
-      {
-        id: Date.now(),
-        inputs: sim.activeInputs.map(i => ({ label: i.label, value: i.value })),
-        outputs: sim.activeOutputs.map(o => ({ label: o.label, value: o.value })),
-      },
-    ]);
+      loggedRows: [
+        ...prev.loggedRows,
+        {
+          id: Date.now(),
+          inputs: sim.activeInputs.map(i => ({ label: i.label, value: i.value })),
+          outputs: sim.activeOutputs.map(o => ({ label: o.label, value: o.value })),
+        },
+      ],
+    }));
   };
 
   return (
@@ -665,10 +780,34 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
               ⚡ Flip +/− Rail
             </button>
           )}
+
+          {selectedWire && selectedWire.curveOffset && (selectedWire.curveOffset.dx !== 0 || selectedWire.curveOffset.dy !== 0) && (
+            <button
+              onClick={() => handleFlexWire(selectedWire.id, { dx: 0, dy: 0 }, true)}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 text-xs text-slate-200"
+              title="Reset bent wire back to default curve"
+            >
+              ↺ Straighten Wire
+            </button>
+          )}
         </div>
 
         {/* Clock Generator, Pulser Mode & Board Controls */}
         <div className="flex flex-wrap items-center gap-1.5">
+          {practiceExpId !== 'sandbox' && (
+            <button
+              onClick={() => setShowNextHint(v => !v)}
+              className={`px-2.5 py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold transition-colors ${
+                showNextHint
+                  ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-200'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle live board hints highlighting next missing component or jumper wire"
+            >
+              💡 Hint: {showNextHint ? 'ON' : 'OFF'}
+            </button>
+          )}
+
           <button
             onClick={() => setPulserLatchMode(m => !m)}
             className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 hover:border-violet-500/50 text-[11px] sm:text-xs font-medium text-violet-300"
@@ -679,7 +818,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
 
           <div className="flex items-center bg-slate-950 border border-slate-800 rounded-lg p-0.5 gap-1">
             <button
-              onClick={() => setState(s => ({ ...s, clkActive: !s.clkActive }))}
+              onClick={() => commitStateUpdate(s => ({ ...s, clkActive: !s.clkActive }), false)}
               className={`px-2 py-1 rounded text-[11px] font-bold transition-colors ${
                 state.clkActive
                   ? 'bg-violet-600 text-white'
@@ -708,13 +847,17 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
 
           <button
             onClick={() => {
-              pushUndo(state);
-              seqMemRef.current = createEmptySeqMemory();
-              setState(s => ({ ...defaultState(), psu: s.psu }));
+              onResetSeqMem();
+              onUpdateSession(prev => ({
+                ...prev,
+                undoStack: [...prev.undoStack.slice(-80), serializeWorkbenchSnapshot(prev.state)],
+                redoStack: [],
+                loggedRows: [],
+                samples: [],
+                state: { ...createDefaultWorkbenchState(), psu: prev.state.psu },
+              }));
               setSelection(null);
               setPendingWireStart(null);
-              setLoggedRows([]);
-              setSamples([]);
               lastSampleSigRef.current = '';
               showFlash('Breadboard cleared.');
             }}
@@ -725,7 +868,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         </div>
       </div>
 
-      {/* Feedback Banner (Armed Tool / Pending Wire / Validation) */}
+      {/* Feedback Banner (Armed Tool / Pending Wire / Flash) */}
       {(armedTool || pendingWireStart || flashMsg) && (
         <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl px-3.5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 text-sky-200 font-medium">
@@ -756,7 +899,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         </div>
       )}
 
-      {/* 2. MAIN WORKSPACE GRID: Palette | Breadboard | Practice & Inspector */}
+      {/* 2. MAIN WORKSPACE GRID: Palette | Breadboard | Circuit Diagram, Practice & Inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
         {/* LEFT: COMPONENT LIBRARY PALETTE */}
         <aside className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2.5 shadow-xl">
@@ -766,7 +909,6 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             </h2>
           </div>
 
-          {/* Filter Pills */}
           <div className="flex flex-wrap gap-1 text-[10px]">
             {[
               { id: 'all', label: 'All' },
@@ -792,9 +934,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             Drag onto breadboard (or click to arm &amp; tap board).
           </p>
 
-          {/* Horizontal Strip on Mobile, Vertical Scroll List on Desktop */}
           <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-y-auto lg:max-h-[480px] pb-1 lg:pb-0 no-scrollbar">
-            {/* Passive & Output Parts */}
             {(libFilter === 'all' || libFilter === 'parts') && (
               <>
                 <button
@@ -857,7 +997,6 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
               </>
             )}
 
-            {/* All 11 Lab ICs */}
             {filteredICs.map(({ type }) => {
               const def = IC_CATALOG[type];
               if (!def) return null;
@@ -898,6 +1037,28 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
 
         {/* CENTER: HORIZONTAL BREADBOARD WORKBENCH CANVAS */}
         <section className="lg:col-span-7 flex flex-col gap-2 min-w-0">
+          {/* Smart Context-Aware Hint Pill above Canvas when practicing */}
+          {showNextHint && nextHint && nextHint.kind !== 'complete' && (
+            <div className="bg-cyan-950/40 border border-cyan-500/40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500 text-slate-950 font-extrabold text-[10px] shrink-0">
+                  NEXT
+                </span>
+                <div className="min-w-0">
+                  <span className="font-bold text-cyan-200 mr-1.5">{nextHint.title}:</span>
+                  <span className="text-[11px] text-slate-300">{nextHint.detail}</span>
+                </div>
+              </div>
+              <button
+                onClick={handleApplyNextHint}
+                className="px-2.5 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-[11px] shrink-0 transition-colors"
+                title="Automatically perform this next step on your board"
+              >
+                ⚡ Make Step
+              </button>
+            </div>
+          )}
+
           {/* Canvas Top Bar: Zoom + Probe Readout */}
           <div className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-1.5">
@@ -936,33 +1097,35 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             armedTool={armedTool}
             pendingWireStart={pendingWireStart}
             dragPreview={dragItem}
+            activeHint={showNextHint ? nextHint : null}
             onStartWire={id => setPendingWireStart(id)}
             onCompleteWire={handleCompleteWire}
             onCancelPendingWire={() => setPendingWireStart(null)}
+            onFlexWire={handleFlexWire}
             onProbe={id => setProbeId(id)}
             onSelect={sel => {
               setSelection(sel);
               if (sel) setSideTab('inspector');
             }}
-            onTogglePSU={() => setState(s => ({ ...s, psu: !s.psu }))}
+            onTogglePSU={() => commitStateUpdate(s => ({ ...s, psu: !s.psu }), false)}
             onPulserDown={idx => {
-              setState(s => {
+              commitStateUpdate(s => {
                 const nextP: [0 | 1, 0 | 1] = [...s.p] as [0 | 1, 0 | 1];
                 nextP[idx] = pulserLatchMode ? (nextP[idx] === 1 ? 0 : 1) : 1;
                 return { ...s, p: nextP };
-              });
+              }, false);
             }}
             onPulserUp={idx => {
               if (!pulserLatchMode) {
-                setState(s => {
+                commitStateUpdate(s => {
                   const nextP: [0 | 1, 0 | 1] = [...s.p] as [0 | 1, 0 | 1];
                   nextP[idx] = 0;
                   return { ...s, p: nextP };
-                });
+                }, false);
               }
             }}
             onStepClock={() => {
-              setState(s => ({ ...s, clkActive: false, clkLevel: s.clkLevel === 1 ? 0 : 1 }));
+              commitStateUpdate(s => ({ ...s, clkActive: false, clkLevel: s.clkLevel === 1 ? 0 : 1 }), false);
             }}
             onDropOnBoard={handleDropOnBoard}
             onBeginDragExisting={(item, cx, cy) => {
@@ -975,12 +1138,21 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             zoomWidth={zoomWidth}
           />
 
-          <p className="text-[11px] text-slate-400 px-1">
-            Tip: Wire <strong>+5V &amp; GND</strong> to the Top/Bottom power rails. Take HIGH (1) / LOW (0) inputs directly from those <strong>+ / −</strong> rails (or <strong>P1 / P2 / CLK</strong>) and view outputs on placed <strong>LEDs</strong> with <strong>330Ω resistors</strong>.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 px-1">
+            <span>
+              Tip: Drag any wire (or select &amp; drag its <strong>✥</strong> grip) to bend it. Double-click wire to straighten.
+            </span>
+            <span className="font-mono text-[10px] flex items-center gap-2">
+              <span>IC Pins:</span>
+              <span className="text-red-300">VCC</span>
+              <span className="text-blue-300">GND</span>
+              <span className="text-sky-300">IN</span>
+              <span className="text-emerald-300">OUT</span>
+            </span>
+          </div>
         </section>
 
-        {/* RIGHT: PRACTICE GUIDE & COMPONENT INSPECTOR SIDEBAR */}
+        {/* RIGHT: CIRCUIT DIAGRAM, PRACTICE GUIDE & COMPONENT INSPECTOR SIDEBAR */}
         <aside className="lg:col-span-3 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl flex flex-col">
           {/* Sidebar Mode Switch */}
           <div className="grid grid-cols-2 border-b border-slate-800 bg-slate-950/60 text-xs font-semibold">
@@ -992,7 +1164,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                   : 'border-transparent text-slate-400 hover:text-slate-200'
               }`}
             >
-              🎯 Experiment Practice
+              🎯 Practice &amp; Diagram
             </button>
             <button
               onClick={() => setSideTab('inspector')}
@@ -1006,8 +1178,8 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             </button>
           </div>
 
-          <div className="p-3.5 space-y-3 max-h-[540px] overflow-y-auto text-xs">
-            {/* TAB A: PRACTICE EXPERIMENT GUIDE */}
+          <div className="p-3.5 space-y-3 lg:max-h-[590px] overflow-y-auto text-xs">
+            {/* TAB A: PRACTICE EXPERIMENT GUIDE + CIRCUIT DIAGRAM */}
             {sideTab === 'practice' && (
               <div className="space-y-3">
                 <div>
@@ -1018,10 +1190,13 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                     value={practiceExpId}
                     onChange={e => {
                       const id = e.target.value;
-                      setPracticeExpId(id);
                       setExpandedHintId(null);
                       const exp = EXPERIMENTS.find(ex => ex.id === id);
-                      if (exp) setPracticeSubId(exp.subCircuits[0].id);
+                      onUpdateSession(prev => ({
+                        ...prev,
+                        practiceExpId: id,
+                        practiceSubId: exp ? exp.subCircuits[0].id : '',
+                      }));
                     }}
                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs font-semibold text-slate-200 outline-none"
                   >
@@ -1042,8 +1217,9 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                     <select
                       value={practiceSubId}
                       onChange={e => {
-                        setPracticeSubId(e.target.value);
+                        const sub = e.target.value;
                         setExpandedHintId(null);
+                        onUpdateSession(prev => ({ ...prev, practiceSubId: sub }));
                       }}
                       className="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-medium text-sky-300 outline-none"
                     >
@@ -1060,17 +1236,66 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                   <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2 text-slate-300 leading-relaxed">
                     <div className="font-bold text-sky-300">Open Breadboard Sandbox</div>
                     <p className="text-[11px] text-slate-400">
-                      Build any digital circuit freely! Pick an Experiment above anytime if you want milestone verification and optional hints while wiring it yourself.
+                      Build any digital circuit freely! Pick an Experiment above to view its circuit schematic diagram, get live board connection hints, and verify milestones while keeping all placed components.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-2.5">
+                    {/* Right-Side Circuit Diagram Card (Toggleable) */}
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => setShowDiagram(v => !v)}
+                        className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 flex items-center gap-1"
+                      >
+                        <span>{showDiagram ? '▾ Hide Circuit Diagram' : '▸ Show Circuit Diagram'}</span>
+                      </button>
+                      <button
+                        onClick={() => setShowNextHint(v => !v)}
+                        className={`text-[10.5px] font-bold px-2 py-0.5 rounded border ${
+                          showNextHint
+                            ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                            : 'bg-slate-800 border-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {showNextHint ? '💡 Board Hints ON' : '💡 Board Hints OFF'}
+                      </button>
+                    </div>
+
+                    {showDiagram && <CircuitSchematic subCircuit={practiceEval.subCircuit} />}
+
+                    {/* Context-Aware Smart Next-Step Assistant Card */}
+                    {nextHint && (
+                      <div
+                        className={`rounded-xl border p-2.5 space-y-1.5 ${
+                          nextHint.kind === 'complete'
+                            ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                            : 'bg-cyan-950/30 border-cyan-500/40 text-cyan-100'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-400">
+                            {nextHint.kind === 'complete' ? '✅ Ready to Test' : '🧭 Suggested Next Step'}
+                          </span>
+                          {nextHint.kind !== 'complete' && (
+                            <button
+                              onClick={handleApplyNextHint}
+                              className="px-2 py-0.5 rounded bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-[10px] font-extrabold transition-colors"
+                            >
+                              ⚡ Make Step
+                            </button>
+                          )}
+                        </div>
+                        <div className="font-bold text-xs">{nextHint.title}</div>
+                        <p className="text-[11px] text-slate-300 leading-snug">{nextHint.detail}</p>
+                      </div>
+                    )}
+
                     <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-2.5">
                       <div className="font-bold text-slate-100">{practiceEval.subCircuit.name}</div>
                       <div className="text-[11px] text-slate-400 mt-0.5">{practiceEval.subCircuit.description}</div>
                     </div>
 
-                    {/* Step-by-Step Build Milestones (User builds it!) */}
+                    {/* Step-by-Step Build Milestones */}
                     <div className="space-y-2">
                       {practiceEval.milestones.map(m => {
                         const isHintOpen = expandedHintId === m.id;
@@ -1083,23 +1308,21 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                                 : 'bg-slate-950/60 border-slate-800'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-2">
-                                <span
-                                  className={`w-4 h-4 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                                    m.completed
-                                      ? 'bg-emerald-500 text-slate-950'
-                                      : 'bg-slate-800 text-slate-400'
-                                  }`}
-                                >
-                                  {m.completed ? '✓' : '•'}
-                                </span>
-                                <div>
-                                  <div className={`font-semibold ${m.completed ? 'text-emerald-300' : 'text-slate-200'}`}>
-                                    {m.title}
-                                  </div>
-                                  <p className="text-[11px] text-slate-400 mt-0.5">{m.detail}</p>
+                            <div className="flex items-start gap-2">
+                              <span
+                                className={`w-4 h-4 mt-0.5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                                  m.completed
+                                    ? 'bg-emerald-500 text-slate-950'
+                                    : 'bg-slate-800 text-slate-400'
+                                }`}
+                              >
+                                {m.completed ? '✓' : '•'}
+                              </span>
+                              <div>
+                                <div className={`font-semibold ${m.completed ? 'text-emerald-300' : 'text-slate-200'}`}>
+                                  {m.title}
                                 </div>
+                                <p className="text-[11px] text-slate-400 mt-0.5">{m.detail}</p>
                               </div>
                             </div>
 
@@ -1122,12 +1345,6 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                         );
                       })}
                     </div>
-
-                    {practiceEval.allReadyToVerify && (
-                      <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-lg p-2.5 text-[11px] text-emerald-200">
-                        ✅ Circuit powered &amp; connected! Toggle your rail inputs / pulsers and use <strong>Log Row</strong> below to verify all truth table states.
-                      </div>
-                    )}
 
                     {/* Optional Reference Target Truth Table */}
                     <div className="border-t border-slate-800 pt-2">
@@ -1254,10 +1471,13 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                           placeholder="e.g. Sum, Carry, Y"
                           onChange={e => {
                             const val = e.target.value;
-                            setState(s => ({
-                              ...s,
-                              leds: s.leds.map(l => (l.id === selectedLED.id ? { ...l, label: val } : l)),
-                            }));
+                            commitStateUpdate(
+                              s => ({
+                                ...s,
+                                leds: s.leds.map(l => (l.id === selectedLED.id ? { ...l, label: val } : l)),
+                              }),
+                              false
+                            );
                           }}
                           className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-100 outline-none"
                         />
@@ -1305,6 +1525,12 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                         ⚡ Swap + Rail (1) ↔ − Rail (0)
                       </button>
                     )}
+                    <button
+                      onClick={() => handleFlexWire(selectedWire.id, { dx: 0, dy: 0 }, true)}
+                      className="w-full py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-semibold"
+                    >
+                      ↺ Reset Wire Bend Curve
+                    </button>
                   </div>
                 ) : (
                   <div className="text-center py-6 text-slate-400 space-y-2">
@@ -1320,8 +1546,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
         </aside>
       </div>
 
-      {/* 3. BOTTOM ANALYTICS PANELS: Truth Table Log | Logic Analyser | Errors & Status */}
-      {/* Mobile Bottom Section Tabs */}
+      {/* 3. BOTTOM ANALYTICS PANELS */}
       <div className="grid grid-cols-3 lg:hidden bg-slate-900 border border-slate-800 rounded-xl p-1 text-xs font-semibold">
         <button
           onClick={() => setBottomMobileTab('tt')}
@@ -1363,7 +1588,7 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
               </button>
               {loggedRows.length > 0 && (
                 <button
-                  onClick={() => setLoggedRows([])}
+                  onClick={() => onUpdateSession(prev => ({ ...prev, loggedRows: [] }))}
                   className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
                 >
                   Clear
@@ -1433,8 +1658,8 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
             {samples.length > 0 && (
               <button
                 onClick={() => {
-                  setSamples([]);
                   lastSampleSigRef.current = '';
+                  onUpdateSession(prev => ({ ...prev, samples: [] }));
                 }}
                 className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
               >

@@ -3,20 +3,28 @@ import { EXPERIMENTS, getExperimentById } from './experiments/registry';
 import { buildCircuitFromConfig } from './simulator/circuitFactory';
 import { DigitalSignal } from './simulator/engine/types';
 
-import { Header } from './components/layout/Header';
+import { AppSection, Header } from './components/layout/Header';
+import { LandingPage } from './components/layout/LandingPage';
 import { BreadboardSVG } from './components/breadboard/BreadboardSVG';
 import { TruthTable } from './components/panels/TruthTable';
 import { CircuitExplainer } from './components/panels/CircuitExplainer';
 import { ComponentInspector } from './components/panels/ComponentInspector';
-import { BuildModePanel } from './components/panels/BuildModePanel';
 import { VivaVoce } from './components/panels/VivaVoce';
 import { PracticeQuiz } from './components/panels/PracticeQuiz';
 import { ObservationTable } from './components/panels/ObservationTable';
 import { TheoryPanel } from './components/panels/TheoryPanel';
+import { CustomWorkbench } from './components/workbench/CustomWorkbench';
 
-type ActiveTab = 'SIMULATOR' | 'THEORY' | 'BUILD' | 'OBSERVATIONS' | 'VIVA' | 'QUIZ';
+type ActiveTab = 'SIMULATOR' | 'THEORY' | 'OBSERVATIONS' | 'VIVA' | 'QUIZ';
 
 export const App: React.FC = () => {
+  // Top-level Workspace Section: Landing Page | Experiment Guides | Custom Workbench
+  const [activeSection, setActiveSection] = useState<AppSection>('HOME');
+  const [workbenchPracticeTarget, setWorkbenchPracticeTarget] = useState<{
+    expId: string | null;
+    subId: string | null;
+  }>({ expId: null, subId: null });
+
   // Active Experiment & Subcircuit state
   const [currentExpId, setCurrentExpId] = useState<string>('exp1');
   const currentExp = useMemo(() => getExperimentById(currentExpId) || EXPERIMENTS[0], [currentExpId]);
@@ -33,7 +41,7 @@ export const App: React.FC = () => {
     }
   }, [currentExp, currentSubId]);
 
-  // Active Tab
+  // Active Tab inside Experiment Guides section
   const [activeTab, setActiveTab] = useState<ActiveTab>('SIMULATOR');
 
   // Input switch toggle states & sequential replay history
@@ -41,18 +49,10 @@ export const App: React.FC = () => {
   const [switchHistory, setSwitchHistory] = useState<Array<Record<string, DigitalSignal>>>([]);
   const [activeRowIndex, setActiveRowIndex] = useState<number | null>(null);
 
-  // Build Mode state
-  const [userPlacedWireIds, setUserPlacedWireIds] = useState<string[]>([]);
-  const [pendingWireStart, setPendingWireStart] = useState<{ row: number; col: string; pinId?: string } | null>(null);
-  const [selectedTargetWireId, setSelectedTargetWireId] = useState<string | null>(null);
-  const [buildFeedbackMessage, setBuildFeedbackMessage] = useState<string | null>(null);
-
   // Circuit instance & dynamic simulation revision ticker
   const [simTick, setSimTick] = useState<number>(0);
   const circuit = useMemo(() => {
-    const c = activeTab === 'BUILD'
-      ? buildCircuitFromConfig(currentSub, userPlacedWireIds)
-      : buildCircuitFromConfig(currentSub);
+    const c = buildCircuitFromConfig(currentSub);
     if (switchHistory.length > 0) {
       for (const stepStates of switchHistory) {
         c.setSwitches(stepStates);
@@ -61,7 +61,7 @@ export const App: React.FC = () => {
       c.setSwitches(switchStates);
     }
     return c;
-  }, [currentSub, activeTab, userPlacedWireIds, switchStates, switchHistory]);
+  }, [currentSub, switchStates, switchHistory]);
 
   // Explainer state
   const [activeExplainStep, setActiveExplainStep] = useState<number>(0);
@@ -83,12 +83,8 @@ export const App: React.FC = () => {
     status: 'MATCH' | 'MISMATCH';
   }>>([]);
 
-  // Reset build mode when subcircuit changes
+  // Reset experiment simulator state when subcircuit changes
   useEffect(() => {
-    setUserPlacedWireIds([]);
-    setPendingWireStart(null);
-    setSelectedTargetWireId(null);
-    setBuildFeedbackMessage(null);
     setActiveExplainStep(0);
     setSelectedComp(null);
     setSwitchStates({});
@@ -141,91 +137,6 @@ export const App: React.FC = () => {
     setSimTick(t => t + 1);
   };
 
-  // Helper to check electrical conductivity equivalence on breadboard
-  const areHolesElectricallyConnected = (
-    h1: { row: number; col: string },
-    h2: { row: number; col: string }
-  ) => {
-    const c1 = h1.col.toUpperCase();
-    const c2 = h2.col.toUpperCase();
-    // Identical hole
-    if (h1.row === h2.row && c1 === c2) return true;
-
-    // Power rails: all holes in same rail are connected along entire column
-    if ((c1 === 'L+' && c2 === 'L+') || (c1 === 'R+' && c2 === 'R+')) return true;
-    if ((c1 === 'L-' && c2 === 'L-') || (c1 === 'R-' && c2 === 'R-')) return true;
-
-    // Terminal strips: holes in same row and same half (A-E or F-J) share spring clip
-    const isLeftHalf = (c: string) => ['A', 'B', 'C', 'D', 'E'].includes(c);
-    const isRightHalf = (c: string) => ['F', 'G', 'H', 'I', 'J'].includes(c);
-    if (h1.row === h2.row) {
-      if (isLeftHalf(c1) && isLeftHalf(c2)) return true;
-      if (isRightHalf(c1) && isRightHalf(c2)) return true;
-    }
-    return false;
-  };
-
-  // Build Mode: Handle Hole Click for Wire Placement with electrical equivalence
-  const handleHoleClick = (hole: { row: number; col: string; pinId?: string }) => {
-    if (activeTab !== 'BUILD') return;
-
-    if (!pendingWireStart) {
-      // Set start point
-      setPendingWireStart(hole);
-      setBuildFeedbackMessage(`Anchor set at ${hole.col}${hole.row}. Now click destination hole.`);
-    } else {
-      const startHole = pendingWireStart;
-      const endHole = hole;
-
-      // If user clicked the exact same hole, cancel
-      if (startHole.row === endHole.row && startHole.col.toUpperCase() === endHole.col.toUpperCase()) {
-        setPendingWireStart(null);
-        setBuildFeedbackMessage('Cancelled: Start and destination cannot be the exact same hole.');
-        return;
-      }
-
-      // Check against all unplaced wires in current subcircuit
-      const matchedWire = currentSub.wires.find(w => {
-        if (userPlacedWireIds.includes(w.id)) return false;
-
-        const forwardMatch =
-          areHolesElectricallyConnected(w.from, startHole) &&
-          areHolesElectricallyConnected(w.to, endHole);
-
-        const reverseMatch =
-          areHolesElectricallyConnected(w.from, endHole) &&
-          areHolesElectricallyConnected(w.to, startHole);
-
-        return forwardMatch || reverseMatch;
-      });
-
-      if (matchedWire) {
-        setUserPlacedWireIds(prev => [...prev, matchedWire.id]);
-        setPendingWireStart(null);
-        setSelectedTargetWireId(null);
-        setBuildFeedbackMessage(`Connected: ${matchedWire.label ?? matchedWire.id}!`);
-      } else {
-        if (areHolesElectricallyConnected(startHole, endHole)) {
-          setBuildFeedbackMessage(`Holes ${startHole.col}${startHole.row} and ${endHole.col}${endHole.row} already share internal spring clip.`);
-        } else {
-          setBuildFeedbackMessage(`No circuit wire connects ${startHole.col}${startHole.row} to ${endHole.col}${endHole.row}. Check the roadmap!`);
-        }
-        setPendingWireStart(null);
-      }
-    }
-  };
-
-  // Place single wire directly (1-click connect)
-  const handlePlaceSingleWire = (wireId: string) => {
-    if (!userPlacedWireIds.includes(wireId)) {
-      setUserPlacedWireIds(prev => [...prev, wireId]);
-      setPendingWireStart(null);
-      setSelectedTargetWireId(null);
-      const wire = currentSub.wires.find(w => w.id === wireId);
-      setBuildFeedbackMessage(`Connected: ${wire?.label ?? wireId}!`);
-    }
-  };
-
   // Record live state into Observation Table
   const handleRecordObservation = () => {
     const inputsRecord: Record<string, number> = {};
@@ -274,6 +185,13 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
       {/* 1. Master Header */}
       <Header
+        activeSection={activeSection}
+        onChangeSection={(sec) => {
+          setActiveSection(sec);
+          if (sec === 'WORKBENCH') {
+            setWorkbenchPracticeTarget({ expId: null, subId: null });
+          }
+        }}
         selectedExp={currentExp}
         selectedSub={currentSub}
         onSelectExp={(id) => {
@@ -284,55 +202,99 @@ export const App: React.FC = () => {
         }}
       />
 
-      {/* 2. Sub-Header: Subcircuit Variants & Navigation Tabs */}
-      <div className="bg-slate-900/90 border-b border-slate-800 backdrop-blur sticky top-[57px] sm:top-[61px] z-20 shadow-md">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-          {/* Subcircuit Variant Badges */}
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto py-0.5 no-scrollbar scroll-smooth">
-            {currentExp.subCircuits.map(sub => (
-              <button
-                key={sub.id}
-                onClick={() => setCurrentSubId(sub.id)}
-                className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
-                  sub.id === currentSub.id
-                    ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
-                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                {sub.name}
-              </button>
-            ))}
+      {/* SECTION 0: LANDING PAGE */}
+      {activeSection === 'HOME' && (
+        <main className="flex-1">
+          <LandingPage
+            onOpenExperiment={(expId) => {
+              if (expId) setCurrentExpId(expId);
+              setActiveTab('SIMULATOR');
+              setActiveSection('EXPERIMENTS');
+            }}
+            onOpenWorkbench={(practiceExpId, practiceSubId) => {
+              setWorkbenchPracticeTarget({
+                expId: practiceExpId ?? null,
+                subId: practiceSubId ?? null,
+              });
+              setActiveSection('WORKBENCH');
+            }}
+          />
+        </main>
+      )}
+
+      {/* SECTION 2: CUSTOM BREADBOARD WORKBENCH */}
+      {activeSection === 'WORKBENCH' && (
+        <main className="flex-1">
+          <CustomWorkbench
+            initialPracticeExpId={workbenchPracticeTarget.expId}
+            initialPracticeSubId={workbenchPracticeTarget.subId}
+          />
+        </main>
+      )}
+
+      {/* SECTION 1: EXPERIMENT GUIDES & INTERACTIVE SIMULATOR */}
+      {activeSection === 'EXPERIMENTS' && (
+        <>
+          {/* Sub-Header: Subcircuit Variants & Navigation Tabs */}
+          <div className="bg-slate-900/90 border-b border-slate-800 backdrop-blur sticky top-[57px] sm:top-[61px] z-20 shadow-md">
+            <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+              {/* Subcircuit Variant Badges */}
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto py-0.5 no-scrollbar scroll-smooth">
+                {currentExp.subCircuits.map(sub => (
+                  <button
+                    key={sub.id}
+                    onClick={() => setCurrentSubId(sub.id)}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
+                      sub.id === currentSub.id
+                        ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
+                        : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                  >
+                    {sub.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Feature Navigation Tabs + Separate Link to Workbench */}
+              <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto no-scrollbar scroll-smooth">
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 text-[11px] sm:text-xs shrink-0">
+                  {[
+                    { id: 'SIMULATOR', label: 'Simulator', icon: '⚡' },
+                    { id: 'THEORY', label: 'Theory', icon: '📖' },
+                    { id: 'OBSERVATIONS', label: 'Observations', icon: '📋' },
+                    { id: 'VIVA', label: 'Viva', icon: '🎓' },
+                    { id: 'QUIZ', label: 'Quiz', icon: '✍' },
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id as ActiveTab)}
+                      className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
+                        activeTab === tab.id
+                          ? 'bg-slate-800 text-slate-100 shadow-sm border border-slate-700/60'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <span>{tab.icon}</span>
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => {
+                    setWorkbenchPracticeTarget({ expId: currentExp.id, subId: currentSub.id });
+                    setActiveSection('WORKBENCH');
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 hover:text-slate-950 border border-amber-500/40 text-amber-300 text-[11px] sm:text-xs font-bold whitespace-nowrap transition-colors shrink-0"
+                >
+                  🛠 Practice in Workbench →
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* Feature Navigation Tabs */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80 overflow-x-auto w-full sm:w-auto text-[11px] sm:text-xs no-scrollbar scroll-smooth">
-            {[
-              { id: 'SIMULATOR', label: 'Simulator', icon: '⚡' },
-              { id: 'BUILD', label: 'Build', icon: '🛠' },
-              { id: 'THEORY', label: 'Theory', icon: '📖' },
-              { id: 'OBSERVATIONS', label: 'Observations', icon: '📋' },
-              { id: 'VIVA', label: 'Viva', icon: '🎓' },
-              { id: 'QUIZ', label: 'Quiz', icon: '✍' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as ActiveTab)}
-                className={`px-2.5 sm:px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 shrink-0 ${
-                  activeTab === tab.id
-                    ? 'bg-slate-800 text-slate-100 shadow-sm border border-slate-700/60'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <span>{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Main Workspace Area */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6">
+          {/* 3. Main Workspace Area */}
+          <main className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6">
         {/* TAB 1: CIRCUIT SIMULATOR */}
         {activeTab === 'SIMULATOR' && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
@@ -455,85 +417,6 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: PRACTICAL BUILD MODE */}
-        {activeTab === 'BUILD' && (() => {
-          const unplacedWires = currentSub.wires.filter(w => !userPlacedWireIds.includes(w.id));
-          const currentTargetWire = unplacedWires.find(w => w.id === selectedTargetWireId) || unplacedWires[0] || null;
-
-          return (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              <div className="lg:col-span-7 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-amber-300 flex items-center gap-2">
-                    <span>🛠 Assembly Canvas</span>
-                    <span className="text-xs font-normal text-slate-400">
-                      ({userPlacedWireIds.length}/{currentSub.wires.length} wires connected)
-                    </span>
-                  </div>
-                  {buildFeedbackMessage && (
-                    <div className="text-xs px-2.5 py-1 rounded bg-slate-900 border border-amber-500/30 text-amber-300 font-mono animate-fade-in">
-                      {buildFeedbackMessage}
-                    </div>
-                  )}
-                </div>
-
-                <BreadboardSVG
-                  config={currentSub}
-                  circuit={circuit}
-                  isBuildMode={true}
-                  userPlacedWireIds={userPlacedWireIds}
-                  pendingWireStart={pendingWireStart}
-                  onHoleClick={handleHoleClick}
-                  onToggleSwitch={handleToggleSwitch}
-                  targetWire={currentTargetWire}
-                  buildStatusMessage={buildFeedbackMessage}
-                />
-              </div>
-
-              <div className="lg:col-span-5 flex flex-col gap-5">
-                <BuildModePanel
-                  config={currentSub}
-                  userPlacedWireIds={userPlacedWireIds}
-                  pendingWireStart={pendingWireStart}
-                  onClearWires={() => {
-                    setUserPlacedWireIds([]);
-                    setPendingWireStart(null);
-                    setSelectedTargetWireId(null);
-                    setBuildFeedbackMessage(null);
-                  }}
-                  onCancelPendingWire={() => {
-                    setPendingWireStart(null);
-                    setBuildFeedbackMessage(null);
-                  }}
-                  onAutoSolve={() => {
-                    setUserPlacedWireIds(currentSub.wires.map(w => w.id));
-                    setPendingWireStart(null);
-                    setSelectedTargetWireId(null);
-                    setBuildFeedbackMessage('All wires connected! Test the circuit using the switches.');
-                  }}
-                  onPlaceWire={handlePlaceSingleWire}
-                  selectedTargetWireId={selectedTargetWireId}
-                  onSelectTargetWireId={(wireId) => {
-                    setSelectedTargetWireId(wireId);
-                    const wire = currentSub.wires.find(w => w.id === wireId);
-                    setBuildFeedbackMessage(`Selected target wire: ${wire?.label ?? wireId}`);
-                  }}
-                />
-
-                {/* Truth table to test once built */}
-                <TruthTable
-                  truthTable={currentSub.truthTable}
-                  inputLabels={inputLabels}
-                  outputLabels={outputLabels}
-                  currentInputs={currentInputsMap}
-                  activeRowIndex={activeRowIndex}
-                  onSelectRowInputs={handleSelectRowInputs}
-                />
-              </div>
-            </div>
-          );
-        })()}
-
         {/* TAB 3: THEORY & APPARATUS */}
         {activeTab === 'THEORY' && (
           <div className="max-w-4xl mx-auto">
@@ -576,7 +459,9 @@ export const App: React.FC = () => {
             <PracticeQuiz questions={currentExp.quizQuestions} />
           </div>
         )}
-      </main>
+          </main>
+        </>
+      )}
 
       {/* 4. Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 py-4 px-6 text-center text-xs text-slate-500">

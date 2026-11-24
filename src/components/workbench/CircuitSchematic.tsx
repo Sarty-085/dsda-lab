@@ -928,14 +928,12 @@ const renderSchematicContent = (sub: SubCircuitConfig): { width: number; height:
       };
 
     // ---------------- EXP 10 ----------------
-    case 'siso_7474':
-    case 'sipo_7474': {
-      const isSipo = sub.id === 'sipo_7474';
+    case 'siso_7474': {
       const stages = [
-        { lbl: 'FF1 (7474#1)', dPin: 2, clkPin: 3, clrPin: 1, prPin: 4, qPin: 5, qLbl: 'QA' },
-        { lbl: 'FF2 (7474#1)', dPin: 12, clkPin: 11, clrPin: 13, prPin: 10, qPin: 9, qLbl: 'QB' },
-        { lbl: 'FF3 (7474#2)', dPin: 2, clkPin: 3, clrPin: 1, prPin: 4, qPin: 5, qLbl: 'QC' },
-        { lbl: 'FF4 (7474#2)', dPin: 12, clkPin: 11, clrPin: 13, prPin: 10, qPin: 9, qLbl: isSipo ? 'QD' : 'Sout' },
+        { lbl: 'FF1 (7474#1)', dPin: 2, clkPin: 3, clrPin: 1, prPin: 4, qPin: 5, qLbl: 'Q1' },
+        { lbl: 'FF2 (7474#1)', dPin: 12, clkPin: 11, clrPin: 13, prPin: 10, qPin: 9, qLbl: 'Q2' },
+        { lbl: 'FF3 (7474#2)', dPin: 2, clkPin: 3, clrPin: 1, prPin: 4, qPin: 5, qLbl: 'Q3' },
+        { lbl: 'FF4 (7474#2)', dPin: 12, clkPin: 11, clrPin: 13, prPin: 10, qPin: 9, qLbl: 'Sout' },
       ];
       return {
         width: 410,
@@ -969,7 +967,7 @@ const renderSchematicContent = (sub: SubCircuitConfig): { width: number; height:
                   {idx < 3 && (
                     <line x1={bx + 60} y1={42} x2={bx + 80} y2={42} stroke="#8b5cf6" strokeWidth={1.6} />
                   )}
-                  {(isSipo || idx === 3) && (
+                  {idx === 3 && (
                     <>
                       <line x1={bx + 60} y1={42} x2={bx + 68} y2={12} stroke="#22c55e" strokeWidth={1.2} />
                       <text x={bx + 68} y={10} textAnchor="middle" fontSize="7" fontWeight="800" fill="#4ade80">
@@ -993,7 +991,7 @@ const renderSchematicContent = (sub: SubCircuitConfig): { width: number; height:
           <g fontFamily="ui-monospace, monospace">
             <rect x={115} y={18} width={118} height={134} rx={6} fill="#1e293b" stroke="#38bdf8" strokeWidth={1.6} />
             <text x={174} y={35} textAnchor="middle" fontSize="9.5" fontWeight="900" fill="#f8fafc">IC 7495</text>
-            <text x={174} y={47} textAnchor="middle" fontSize="7" fill="#94a3b8">4-Bit Shift Register</text>
+            <text x={174} y={47} textAnchor="middle" fontSize="7" fill="#94a3b8">4-Bit SIPO Shift Reg</text>
 
             {/* Left Inputs */}
             <InputTag x={44} y={56} label="Din" />

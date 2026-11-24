@@ -86,7 +86,12 @@ export function loadSavedWorkbenchSession(): WorkbenchSessionData {
       loggedRows: Array.isArray(parsed.loggedRows) ? parsed.loggedRows : [],
       samples: Array.isArray(parsed.samples) ? parsed.samples.slice(-40) : [],
       practiceExpId: typeof parsed.practiceExpId === 'string' ? parsed.practiceExpId : 'sandbox',
-      practiceSubId: typeof parsed.practiceSubId === 'string' ? parsed.practiceSubId : '',
+      practiceSubId:
+        parsed.practiceSubId === 'sipo_7474'
+          ? 'sipo_7495'
+          : typeof parsed.practiceSubId === 'string'
+          ? parsed.practiceSubId
+          : '',
     };
   } catch {
     return fallback;
@@ -1215,7 +1220,11 @@ export const CustomWorkbench: React.FC<CustomWorkbenchProps> = ({
                       Circuit Variant
                     </label>
                     <select
-                      value={practiceSubId}
+                      value={
+                        selectedExpObj.subCircuits.some(s => s.id === practiceSubId)
+                          ? practiceSubId
+                          : selectedExpObj.subCircuits[0].id
+                      }
                       onChange={e => {
                         const sub = e.target.value;
                         setExpandedHintId(null);

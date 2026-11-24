@@ -15,14 +15,14 @@ A Serial-In Serial-Out (SISO) shift register accepts data one bit at a time thro
 - Typically made of multiple D flip-flops (2× IC 7474 Dual D Flip-Flop with Preset and Clear) connected in series and synchronized by a common clock.
 
 Serial-In Parallel-Out Shift Register (SIPO):
-A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a single input line and produces all bits simultaneously as a parallel output, using multiple synchronized flip-flops. The main use of the SIPO register is to convert serial data into parallel data.
-- Data is input one bit at a time and outputs all stored bits in parallel (QA, QB, QC, QD).
-- Implemented both using 2× IC 7474 D flip-flops (with common CLK and CLR') and using dedicated 4-bit shift register IC 7495 (Mode M=0 for serial right shift via CK1, M=1 for parallel load via CK2).`,
+A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a single input line and produces all bits simultaneously as a parallel output. The main use of the SIPO register is to convert serial data into parallel data.
+- Data is input one bit at a time and outputs all stored bits simultaneously in parallel (QA, QB, QC, QD).
+- Implemented using 1 dedicated IC 7495 (4-bit Parallel-Access Shift Register) with Mode M=0 for serial right shift via CK1, and M=1 via CK2 (with A..D grounded) to parallel-clear outputs to 0000.`,
     keyPoints: [
-      'A 4-bit shift register requires 4 D flip-flops (2 packages of IC 7474) or 1 dedicated IC 7495.',
-      'In IC 7474, Preset (PR\') and Clear (CLR\') are active-LOW; keep PR\' connected to +5V during normal shifting.',
+      'A 4-bit SISO shift register uses 4 D flip-flops (2 packages of IC 7474), while the 4-bit SIPO shift register uses 1 dedicated IC 7495.',
+      'In IC 7474 (SISO), Preset (PR\') and Clear (CLR\') are active-LOW; keep PR\' connected to +5V during normal shifting.',
       'Each positive clock transition shifts Q1 -> Q2 -> Q3 -> Q4 simultaneously without race conditions.',
-      'IC 7495 Pin 6 (Mode M) switches between Serial Right Shift (M=0, CK1) and Parallel Load (M=1, CK2).',
+      'IC 7495 (SIPO) Pin 6 (Mode M) switches between Serial Right Shift (M=0, CK1) and Parallel Load (M=1, CK2).',
     ],
   },
   components: [
@@ -139,97 +139,10 @@ A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a s
       ],
     },
     {
-      id: 'sipo_7474',
-      name: '4-Bit SIPO Shift Register (2× IC 7474)',
-      subtitle: 'Serial Input Din -> Parallel Outputs QA, QB, QC, QD',
-      description: '4-bit Serial-In Parallel-Out shift register converting 4 serial input bits into a simultaneous 4-bit parallel word.',
-      ics: [
-        { instanceId: 'ic_7474_1', partNumber: '7474', label: 'IC 7474 #1 (FF1, FF2)', rowStart: 8 },
-        { instanceId: 'ic_7474_2', partNumber: '7474', label: 'IC 7474 #2 (FF3, FF4)', rowStart: 20 },
-      ],
-      inputs: [
-        { id: 'in_clr', label: "CLR'", defaultState: DigitalSignal.HIGH, boardConnection: { row: 2, col: 'B' } },
-        { id: 'in_clk', label: 'CLK', defaultState: DigitalSignal.LOW, boardConnection: { row: 4, col: 'B' } },
-        { id: 'in_din', label: 'Din', defaultState: DigitalSignal.LOW, boardConnection: { row: 6, col: 'B' } },
-      ],
-      outputs: [
-        { id: 'out_qa', label: 'QA', color: 'green', boardConnection: { row: 28, col: 'I' } },
-        { id: 'out_qb', label: 'QB', color: 'green', boardConnection: { row: 30, col: 'I' } },
-        { id: 'out_qc', label: 'QC', color: 'green', boardConnection: { row: 32, col: 'I' } },
-        { id: 'out_qd', label: 'QD', color: 'green', boardConnection: { row: 34, col: 'I' } },
-      ],
-      wires: [
-        { id: 'w_vcc_1', from: { row: 8, col: 'L+' }, to: { row: 8, col: 'J' }, color: '#ef4444', label: '7474 #1 VCC', fromPinId: 'pwr_vcc', toPinId: 'ic_7474_1_pin_14' },
-        { id: 'w_gnd_1', from: { row: 14, col: 'L-' }, to: { row: 14, col: 'A' }, color: '#1e293b', label: '7474 #1 GND', fromPinId: 'pwr_gnd', toPinId: 'ic_7474_1_pin_7' },
-        { id: 'w_vcc_2', from: { row: 20, col: 'L+' }, to: { row: 20, col: 'J' }, color: '#ef4444', label: '7474 #2 VCC', fromPinId: 'pwr_vcc', toPinId: 'ic_7474_2_pin_14' },
-        { id: 'w_gnd_2', from: { row: 26, col: 'L-' }, to: { row: 26, col: 'A' }, color: '#1e293b', label: '7474 #2 GND', fromPinId: 'pwr_gnd', toPinId: 'ic_7474_2_pin_7' },
-
-        { id: 'w_pr1', from: { row: 11, col: 'L+' }, to: { row: 11, col: 'D' }, color: '#ef4444', label: "FF1 1PR' -> +5V", fromPinId: 'pwr_vcc', toPinId: 'ic_7474_1_pin_4' },
-        { id: 'w_pr2', from: { row: 12, col: 'R+' }, to: { row: 12, col: 'J' }, color: '#ef4444', label: "FF2 2PR' -> +5V", fromPinId: 'pwr_vcc', toPinId: 'ic_7474_1_pin_10' },
-        { id: 'w_pr3', from: { row: 23, col: 'L+' }, to: { row: 23, col: 'D' }, color: '#ef4444', label: "FF3 1PR' -> +5V", fromPinId: 'pwr_vcc', toPinId: 'ic_7474_2_pin_4' },
-        { id: 'w_pr4', from: { row: 24, col: 'R+' }, to: { row: 24, col: 'J' }, color: '#ef4444', label: "FF4 2PR' -> +5V", fromPinId: 'pwr_vcc', toPinId: 'ic_7474_2_pin_10' },
-
-        { id: 'w_clr1', from: { row: 2, col: 'B' }, to: { row: 8, col: 'E' }, color: '#ec4899', label: "CLR' -> FF1", fromPinId: 'sw_out_in_clr', toPinId: 'ic_7474_1_pin_1' },
-        { id: 'w_clr2', from: { row: 2, col: 'C' }, to: { row: 9, col: 'F' }, color: '#ec4899', label: "CLR' -> FF2", fromPinId: 'sw_out_in_clr', toPinId: 'ic_7474_1_pin_13' },
-        { id: 'w_clr3', from: { row: 2, col: 'D' }, to: { row: 20, col: 'E' }, color: '#ec4899', label: "CLR' -> FF3", fromPinId: 'sw_out_in_clr', toPinId: 'ic_7474_2_pin_1' },
-        { id: 'w_clr4', from: { row: 2, col: 'A' }, to: { row: 21, col: 'F' }, color: '#ec4899', label: "CLR' -> FF4", fromPinId: 'sw_out_in_clr', toPinId: 'ic_7474_2_pin_13' },
-
-        { id: 'w_clk1', from: { row: 4, col: 'B' }, to: { row: 10, col: 'E' }, color: '#f59e0b', label: 'CLK -> FF1', fromPinId: 'sw_out_in_clk', toPinId: 'ic_7474_1_pin_3' },
-        { id: 'w_clk2', from: { row: 4, col: 'C' }, to: { row: 11, col: 'F' }, color: '#f59e0b', label: 'CLK -> FF2', fromPinId: 'sw_out_in_clk', toPinId: 'ic_7474_1_pin_11' },
-        { id: 'w_clk3', from: { row: 4, col: 'D' }, to: { row: 22, col: 'E' }, color: '#f59e0b', label: 'CLK -> FF3', fromPinId: 'sw_out_in_clk', toPinId: 'ic_7474_2_pin_3' },
-        { id: 'w_clk4', from: { row: 4, col: 'A' }, to: { row: 23, col: 'F' }, color: '#f59e0b', label: 'CLK -> FF4', fromPinId: 'sw_out_in_clk', toPinId: 'ic_7474_2_pin_11' },
-
-        { id: 'w_din', from: { row: 6, col: 'B' }, to: { row: 9, col: 'E' }, color: '#3b82f6', label: 'Din -> FF1 1D', fromPinId: 'sw_out_in_din', toPinId: 'ic_7474_1_pin_2' },
-        { id: 'w_qa_db', from: { row: 12, col: 'E' }, to: { row: 10, col: 'F' }, color: '#8b5cf6', label: 'QA -> FF2 2D', fromPinId: 'ic_7474_1_pin_5', toPinId: 'ic_7474_1_pin_12' },
-        { id: 'w_qb_dc', from: { row: 13, col: 'F' }, to: { row: 21, col: 'E' }, color: '#8b5cf6', label: 'QB -> FF3 1D', fromPinId: 'ic_7474_1_pin_9', toPinId: 'ic_7474_2_pin_2' },
-        { id: 'w_qc_dd', from: { row: 24, col: 'E' }, to: { row: 22, col: 'F' }, color: '#8b5cf6', label: 'QC -> FF4 2D', fromPinId: 'ic_7474_2_pin_5', toPinId: 'ic_7474_2_pin_12' },
-
-        // Parallel output LEDs QA..QD
-        { id: 'w_out_qa', from: { row: 12, col: 'D' }, to: { row: 28, col: 'I' }, color: '#22c55e', label: 'QA LED', fromPinId: 'ic_7474_1_pin_5', toPinId: 'led_in_out_qa' },
-        { id: 'w_out_qb', from: { row: 13, col: 'G' }, to: { row: 30, col: 'I' }, color: '#22c55e', label: 'QB LED', fromPinId: 'ic_7474_1_pin_9', toPinId: 'led_in_out_qb' },
-        { id: 'w_out_qc', from: { row: 24, col: 'D' }, to: { row: 32, col: 'I' }, color: '#22c55e', label: 'QC LED', fromPinId: 'ic_7474_2_pin_5', toPinId: 'led_in_out_qc' },
-        { id: 'w_out_qd', from: { row: 25, col: 'F' }, to: { row: 34, col: 'I' }, color: '#22c55e', label: 'QD LED', fromPinId: 'ic_7474_2_pin_9', toPinId: 'led_in_out_qd' },
-      ],
-      truthTable: [
-        { inputs: { "CLR'": 0, CLK: 0, Din: 0 }, outputs: { QA: 0, QB: 0, QC: 0, QD: 0 }, label: 'Async Clear -> 0000' },
-        { inputs: { "CLR'": 1, CLK: 1, Din: 1 }, outputs: { QA: 1, QB: 0, QC: 0, QD: 0 }, label: 'Clock 1 (Din=1) -> 1000' },
-        { inputs: { "CLR'": 1, CLK: 0, Din: 1 }, outputs: { QA: 1, QB: 0, QC: 0, QD: 0 }, label: 'Clock Low (Prep Din=1)' },
-        { inputs: { "CLR'": 1, CLK: 1, Din: 1 }, outputs: { QA: 1, QB: 1, QC: 0, QD: 0 }, label: 'Clock 2 (Din=1) -> 1100' },
-        { inputs: { "CLR'": 1, CLK: 0, Din: 0 }, outputs: { QA: 1, QB: 1, QC: 0, QD: 0 }, label: 'Clock Low (Prep Din=0)' },
-        { inputs: { "CLR'": 1, CLK: 1, Din: 0 }, outputs: { QA: 0, QB: 1, QC: 1, QD: 0 }, label: 'Clock 3 (Din=0) -> 0110' },
-        { inputs: { "CLR'": 1, CLK: 0, Din: 1 }, outputs: { QA: 0, QB: 1, QC: 1, QD: 0 }, label: 'Clock Low (Prep Din=1)' },
-        { inputs: { "CLR'": 1, CLK: 1, Din: 1 }, outputs: { QA: 1, QB: 0, QC: 1, QD: 1 }, label: 'Clock 4 -> Parallel Word 1011!' },
-        { inputs: { "CLR'": 1, CLK: 0, Din: 0 }, outputs: { QA: 1, QB: 0, QC: 1, QD: 1 }, label: 'Hold Parallel Output 1011' },
-      ],
-      booleanExpression: {
-        primary: "Q_A(t+1) = D_{\\text{in}},\\; Q_B(t+1) = Q_A(t),\\; Q_C(t+1) = Q_B(t),\\; Q_D(t+1) = Q_C(t)",
-        intermediate: [
-          "\\text{Parallel Output Readout}: [Q_A\\, Q_B\\, Q_C\\, Q_D]\\; \\text{available simultaneously after 4 shifts}",
-        ],
-      },
-      explanationSteps: [
-        {
-          step: 1,
-          title: 'Reset Stored Bits (CLR\'=0)',
-          description: 'Drive CLR\' LOW to reset parallel outputs QA QB QC QD to 0000.',
-          formulaSnippet: "[Q_A Q_B Q_C Q_D] = 0000",
-          highlightComponentId: 'ic_7474_1',
-          highlightPins: [1, 13],
-        },
-        {
-          step: 2,
-          title: 'Shift Serial Stream (4 Clocks)',
-          description: 'With CLR\' = 1, apply 4 serial bits on Din alongside rising clock pulses. After 4 pulses, all 4 bits appear simultaneously on LEDs QA–QD.',
-          formulaSnippet: "D_{\\text{in}} \\rightarrow Q_A \\rightarrow Q_B \\rightarrow Q_C \\rightarrow Q_D",
-          highlightComponentId: 'ic_7474_2',
-        },
-      ],
-    },
-    {
       id: 'sipo_7495',
-      name: '4-Bit Shift Register (IC 7495)',
-      subtitle: 'Serial Shift (M=0) & Parallel Load Clear (M=1)',
-      description: 'Dedicated IC 7495 4-bit shift register: Mode M=1 clears via parallel inputs A..D=0, and M=0 shifts Din right across QA..QD.',
+      name: '4-Bit SIPO Shift Register (IC 7495)',
+      subtitle: '1× IC 7495 · Serial Shift (M=0) & Parallel Clear (M=1)',
+      description: 'Dedicated single IC 7495 4-bit SIPO shift register: Mode M=1 clears via parallel inputs A..D=0, and M=0 shifts Din right across parallel outputs QA..QD.',
       ics: [
         { instanceId: 'ic_7495', partNumber: '7495', label: 'IC 7495 (4-Bit Shift Reg)', rowStart: 12 },
       ],
@@ -305,13 +218,13 @@ A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a s
     },
   ],
   procedure: [
-    { stepNumber: 1, instruction: 'Mount two IC 7474 chips (or one IC 7495) on the breadboard and connect Pin 14 to +5V, Pin 7 to GND.' },
-    { stepNumber: 2, instruction: 'Tie active-low Preset (PR\') pins (Pins 4, 10) of 7474 ICs to +5V and connect common Clear (CLR\') and Clock (CLK) lines.' },
-    { stepNumber: 3, instruction: 'Cascade 1Q -> 2D (FF1 to FF2), 2Q -> 1D (FF2 to FF3), and 1Q -> 2D (FF3 to FF4).' },
-    { stepNumber: 4, instruction: 'Reset all flip-flops (CLR\'=0 on 7474 or M=1 load 0000 on 7495), then apply serial input bits on Din with clock pulses.' },
-    { stepNumber: 5, instruction: 'Observe serial output at Q4 (SISO) and parallel outputs QA–QD (SIPO).' },
+    { stepNumber: 1, instruction: 'For SISO: mount two IC 7474 chips on the breadboard and connect Pin 14 to +5V, Pin 7 to GND.' },
+    { stepNumber: 2, instruction: 'For SISO: tie active-low Preset (PR\') pins (Pins 4, 10) to +5V, connect common Clear (CLR\') and Clock (CLK), and cascade 1Q -> 2D (FF1->FF2), 2Q -> 1D (FF2->FF3), 1Q -> 2D (FF3->FF4).' },
+    { stepNumber: 3, instruction: 'For SIPO: mount one IC 7495 on the breadboard (Pin 14 -> +5V, Pin 7 -> GND); wire Pin 1 (DS) to Din, Pin 6 to Mode M, Pins 8 & 9 (CK2, CK1) to CLK, and Pins 2–5 (A–D) to GND.' },
+    { stepNumber: 4, instruction: 'Reset stored bits (CLR\'=0 on 7474 for SISO, or M=1 clock pulse to load 0000 on IC 7495 for SIPO), then apply serial input bits on Din with clock pulses.' },
+    { stepNumber: 5, instruction: 'Observe serial output at Q4 (SISO on 2× 7474) and parallel outputs QA–QD at Pins 13–10 (SIPO on 1× IC 7495).' },
   ],
-  conclusion: 'Serial In-Serial Out and Serial In-Parallel Out Shift Registers were studied and implemented successfully.',
+  conclusion: 'Serial In-Serial Out (using 2× IC 7474) and Serial In-Parallel Out (using 1× IC 7495) Shift Registers were studied and implemented successfully.',
   vivaQuestions: [
     {
       id: 'v1',
@@ -323,8 +236,8 @@ A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a s
     {
       id: 'v2',
       category: 'Basic',
-      question: 'What is the primary application of a SIPO shift register?',
-      answer: 'A SIPO shift register converts incoming serial bitstreams (such as UART/SPI data) into parallel multi-bit words for microprocessors or displays.',
+      question: 'What is the primary application of a SIPO shift register (IC 7495)?',
+      answer: 'A SIPO shift register converts incoming serial bitstreams (such as UART/SPI data) into parallel multi-bit words available simultaneously on QA–QD.',
       hint: 'Think of serial-to-parallel interface conversion.',
     },
     {
@@ -337,15 +250,15 @@ A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a s
     {
       id: 'v4',
       category: 'Intermediate',
-      question: 'Why must Preset (PR\') pins on IC 7474 be connected to +5V during normal shifting?',
+      question: 'Why must Preset (PR\') pins on IC 7474 be connected to +5V during normal SISO shifting?',
       answer: 'Because Preset (PR\') is active-LOW; leaving it floating or grounded can accidentally force Q = 1 asynchronously regardless of clock or D.',
       hint: 'Check the bubble / overbar on PR\' and CLR\' in the 7474 pinout.',
     },
     {
       id: 'v5',
       category: 'Advanced',
-      question: 'How does the Mode Control (Pin 6) on IC 7495 control operation?',
-      answer: 'When M = 0, IC 7495 operates in Serial Shift-Right mode clocked by CK1 (Pin 9). When M = 1, it operates in Parallel Load mode clocked by CK2 (Pin 8).',
+      question: 'How does the Mode Control (Pin 6) on IC 7495 control SIPO operation?',
+      answer: 'When M = 0, IC 7495 operates in Serial Shift-Right mode clocked by CK1 (Pin 9) from DS (Pin 1). When M = 1, it operates in Parallel Load mode clocked by CK2 (Pin 8).',
       hint: 'Check Pin 6, Pin 8, and Pin 9 labels on Page 27 of the manual.',
     },
   ],
@@ -353,10 +266,10 @@ A Serial-In Parallel-Out (SIPO) shift register accepts data serially through a s
     {
       id: 'q1',
       type: 'MCQ',
-      question: 'How many IC 7474 packages are required to construct a 4-bit shift register?',
+      question: 'How many IC 7474 packages are required to construct a 4-bit SISO shift register?',
       options: ['2', '1', '4', '3'],
       correctIndex: 0,
-      explanation: 'Each IC 7474 contains 2 D flip-flops (Dual D Flip-Flop), so 2 ICs provide 4 flip-flops.',
+      explanation: 'Each IC 7474 contains 2 D flip-flops (Dual D Flip-Flop), so 2 ICs provide 4 flip-flops for SISO.',
     },
     {
       id: 'q2',
